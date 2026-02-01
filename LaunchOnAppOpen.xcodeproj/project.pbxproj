@@ -6,8 +6,51 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D16C6E262F2EBF77002954AD /* LaunchOnAppOpenAgent.app in Resources */ = {isa = PBXBuildFile; fileRef = D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */; };
+		D183EA7D2F2EEBBA00D8EC67 /* LaunchOnAppOpenAgent.app in CopyFiles */ = {isa = PBXBuildFile; fileRef = D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D16C6E272F2EBF77002954AD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D184FF002F2E828E0045ABFE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D184FF192F2E837E0045ABFE;
+			remoteInfo = LaunchOnAppOpenAgent;
+		};
+		D16C6E292F2EBF87002954AD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D184FF002F2E828E0045ABFE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D184FF192F2E837E0045ABFE;
+			remoteInfo = LaunchOnAppOpenAgent;
+		};
+		D16C6E2C2F2EBFAA002954AD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D184FF002F2E828E0045ABFE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D184FF192F2E837E0045ABFE;
+			remoteInfo = LaunchOnAppOpenAgent;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D16C6E2E2F2EBFCB002954AD /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LoginItems;
+			dstSubfolderSpec = 1;
+			files = (
+				D183EA7D2F2EEBBA00D8EC67 /* LaunchOnAppOpenAgent.app in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		D184FF082F2E828E0045ABFE /* LaunchOnAppOpen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LaunchOnAppOpen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LaunchOnAppOpenAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +59,22 @@
 			path = LaunchOnAppOpen;
 			sourceTree = "<group>";
 		};
+		D184FF1B2F2E837E0045ABFE /* LaunchOnAppOpenAgent */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LaunchOnAppOpenAgent;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		D184FF052F2E828E0045ABFE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D184FF172F2E837E0045ABFE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				D184FF0A2F2E828E0045ABFE /* LaunchOnAppOpen */,
+				D184FF1B2F2E837E0045ABFE /* LaunchOnAppOpenAgent */,
 				D184FF092F2E828E0045ABFE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				D184FF082F2E828E0045ABFE /* LaunchOnAppOpen.app */,
+				D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,10 +112,14 @@
 				D184FF042F2E828E0045ABFE /* Sources */,
 				D184FF052F2E828E0045ABFE /* Frameworks */,
 				D184FF062F2E828E0045ABFE /* Resources */,
+				D16C6E2E2F2EBFCB002954AD /* CopyFiles */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D16C6E282F2EBF77002954AD /* PBXTargetDependency */,
+				D16C6E2A2F2EBF87002954AD /* PBXTargetDependency */,
+				D16C6E2D2F2EBFAA002954AD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D184FF0A2F2E828E0045ABFE /* LaunchOnAppOpen */,
@@ -68,6 +129,28 @@
 			);
 			productName = LaunchOnAppOpen;
 			productReference = D184FF082F2E828E0045ABFE /* LaunchOnAppOpen.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D184FF222F2E837F0045ABFE /* Build configuration list for PBXNativeTarget "LaunchOnAppOpenAgent" */;
+			buildPhases = (
+				D184FF162F2E837E0045ABFE /* Sources */,
+				D184FF172F2E837E0045ABFE /* Frameworks */,
+				D184FF182F2E837E0045ABFE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D184FF1B2F2E837E0045ABFE /* LaunchOnAppOpenAgent */,
+			);
+			name = LaunchOnAppOpenAgent;
+			packageProductDependencies = (
+			);
+			productName = LaunchOnAppOpenAgent;
+			productReference = D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -81,6 +164,9 @@
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					D184FF072F2E828E0045ABFE = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					D184FF192F2E837E0045ABFE = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -100,12 +186,21 @@
 			projectRoot = "";
 			targets = (
 				D184FF072F2E828E0045ABFE /* LaunchOnAppOpen */,
+				D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		D184FF062F2E828E0045ABFE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D16C6E262F2EBF77002954AD /* LaunchOnAppOpenAgent.app in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D184FF182F2E837E0045ABFE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +217,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D184FF162F2E837E0045ABFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D16C6E282F2EBF77002954AD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */;
+			targetProxy = D16C6E272F2EBF77002954AD /* PBXContainerItemProxy */;
+		};
+		D16C6E2A2F2EBF87002954AD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */;
+			targetProxy = D16C6E292F2EBF87002954AD /* PBXContainerItemProxy */;
+		};
+		D16C6E2D2F2EBFAA002954AD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */;
+			targetProxy = D16C6E2C2F2EBFAA002954AD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D184FF112F2E828F0045ABFE /* Debug */ = {
@@ -248,22 +368,39 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
+				DEVELOPMENT_TEAM = 96J3KL7YGQ;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duhnnie.LaunchOnAppOpen;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -278,22 +415,125 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
+				DEVELOPMENT_TEAM = 96J3KL7YGQ;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duhnnie.LaunchOnAppOpen;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		D184FF232F2E837F0045ABFE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 96J3KL7YGQ;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.duhnnie.LaunchOnAppOpen.agent;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D184FF242F2E837F0045ABFE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 96J3KL7YGQ;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.duhnnie.LaunchOnAppOpen.agent;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -320,6 +560,15 @@
 			buildConfigurations = (
 				D184FF142F2E828F0045ABFE /* Debug */,
 				D184FF152F2E828F0045ABFE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D184FF222F2E837F0045ABFE /* Build configuration list for PBXNativeTarget "LaunchOnAppOpenAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D184FF232F2E837F0045ABFE /* Debug */,
+				D184FF242F2E837F0045ABFE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
