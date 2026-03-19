@@ -95,11 +95,7 @@ class FSScanner {
   weak var delegate: ScannerDelegate?
   var attrList: attrlist
   let bufferSize: Int
-  let skipDirs: Set<String> = [
-      "node_modules",
-      "dist",
-      "build"
-  ]
+  
   init() {
     self.attrList = attrlist(
       bitmapcount: UInt16(ATTR_BIT_MAP_COUNT),
@@ -123,24 +119,24 @@ class FSScanner {
   
   
   
-  func scanDirectory(_ path: String) {
+  func scanDirectory(_ path: String)-> [FileMetadata]{
     let c = countDirectory(path)
-    if c > 1000 {
-      print("跳过超多文件目录 \(path) \(c)")
-      return
+    if c > 500 {
+      log("跳过超多文件目录 \(path) \(c)")
+      return []
     }
     
     let fd = open(path, O_RDONLY | O_DIRECTORY)
     guard fd >= 0 else {
       perror("open")
-      return
+      return []
     }
     defer { close(fd) }
     
     
     
     var buffer = [UInt8](repeating: 0, count: bufferSize)
-    
+    var files: [FileMetadata] = []
     buffer.withUnsafeMutableBytes { rawBuf in
       
       guard let base = rawBuf.baseAddress else { return }
@@ -163,7 +159,7 @@ class FSScanner {
         if count == 0 { break }
         
         var entryOffset = 0
-        var files: [FileMetadata] = []
+        
         for _ in 0..<count {
           
           let entryLength = base.load(
@@ -212,13 +208,14 @@ class FSScanner {
             // todo 这个属性就是占位的, 暂时不用
             let _ = reader.read(vtagtype.self)
             // let vt = reader.read(vtagtype.self)
-            //                        print("vtagtype ", vt)
+            //                        log("vtagtype ", vt)
           }
           
           if returned.commonattr & UInt32(ATTR_CMN_MODTIME) != 0 {
             
             let st = reader.read(timespec.self)
-            file.mtime = st.tv_nsec
+            file.mtime = Int64(st.tv_sec)
+//            log("时间: \(st.tv_nsec) \(st.tv_sec)")
           }
           
           
@@ -226,8 +223,7 @@ class FSScanner {
             
             file.size = reader.read(Int64.self)
           }
-          //                    print(file)
-          if file.isDir && !skipDirs.contains(file.name) {
+          if file.isDir && !IgnoreSet.shouldIgnore(name: file.name) {
             
             delegate?.scannerDidFindFolder("\(path)/\(file.name)")
           }
@@ -235,8 +231,11 @@ class FSScanner {
           
         }
         
+        
+        
       }
     }
+    return files
   }
 }
 

@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D16C6E262F2EBF77002954AD /* LaunchOnAppOpenAgent.app in Resources */ = {isa = PBXBuildFile; fileRef = D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */; };
-		D183EA7D2F2EEBBA00D8EC67 /* LaunchOnAppOpenAgent.app in CopyFiles */ = {isa = PBXBuildFile; fileRef = D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5FDB1E202F6A7D05006D6D45 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 5FDB1E1F2F6A7D05006D6D45 /* SQLite */; };
+		5FDB1E222F6A7D0A006D6D45 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 5FDB1E212F6A7D0A006D6D45 /* SQLite */; };
+		D16C6E262F2EBF77002954AD /* EasyQAgent.app in Resources */ = {isa = PBXBuildFile; fileRef = D184FF1A2F2E837E0045ABFE /* EasyQAgent.app */; };
+		D183EA7D2F2EEBBA00D8EC67 /* EasyQAgent.app in CopyFiles */ = {isa = PBXBuildFile; fileRef = D184FF1A2F2E837E0045ABFE /* EasyQAgent.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,49 +21,55 @@
 			remoteGlobalIDString = D184FF192F2E837E0045ABFE;
 			remoteInfo = LaunchOnAppOpenAgent;
 		};
-		D16C6E292F2EBF87002954AD /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = D184FF002F2E828E0045ABFE /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D184FF192F2E837E0045ABFE;
-			remoteInfo = LaunchOnAppOpenAgent;
-		};
-		D16C6E2C2F2EBFAA002954AD /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = D184FF002F2E828E0045ABFE /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D184FF192F2E837E0045ABFE;
-			remoteInfo = LaunchOnAppOpenAgent;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		5FDB1E172F6A7C11006D6D45 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5FDB1E1D2F6A7C16006D6D45 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D16C6E2E2F2EBFCB002954AD /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = Contents/Library/LoginItems;
 			dstSubfolderSpec = 1;
 			files = (
-				D183EA7D2F2EEBBA00D8EC67 /* LaunchOnAppOpenAgent.app in CopyFiles */,
+				D183EA7D2F2EEBBA00D8EC67 /* EasyQAgent.app in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		D184FF082F2E828E0045ABFE /* LaunchOnAppOpen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LaunchOnAppOpen.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LaunchOnAppOpenAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D184FF082F2E828E0045ABFE /* EasyQ.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EasyQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D184FF1A2F2E837E0045ABFE /* EasyQAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EasyQAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		D184FF0A2F2E828E0045ABFE /* LaunchOnAppOpen */ = {
+		D184FF0A2F2E828E0045ABFE /* EasyQ */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = LaunchOnAppOpen;
+			path = EasyQ;
 			sourceTree = "<group>";
 		};
-		D184FF1B2F2E837E0045ABFE /* LaunchOnAppOpenAgent */ = {
+		D184FF1B2F2E837E0045ABFE /* EasyQAgent */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = LaunchOnAppOpenAgent;
+			path = EasyQAgent;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -71,6 +79,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5FDB1E202F6A7D05006D6D45 /* SQLite in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,17 +87,26 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5FDB1E222F6A7D0A006D6D45 /* SQLite in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		5FDB1E112F6A7C11006D6D45 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		D184FEFF2F2E828E0045ABFE = {
 			isa = PBXGroup;
 			children = (
-				D184FF0A2F2E828E0045ABFE /* LaunchOnAppOpen */,
-				D184FF1B2F2E837E0045ABFE /* LaunchOnAppOpenAgent */,
+				D184FF0A2F2E828E0045ABFE /* EasyQ */,
+				D184FF1B2F2E837E0045ABFE /* EasyQAgent */,
+				5FDB1E112F6A7C11006D6D45 /* Frameworks */,
 				D184FF092F2E828E0045ABFE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -96,8 +114,8 @@
 		D184FF092F2E828E0045ABFE /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				D184FF082F2E828E0045ABFE /* LaunchOnAppOpen.app */,
-				D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */,
+				D184FF082F2E828E0045ABFE /* EasyQ.app */,
+				D184FF1A2F2E837E0045ABFE /* EasyQAgent.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -105,52 +123,54 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		D184FF072F2E828E0045ABFE /* LaunchOnAppOpen */ = {
+		D184FF072F2E828E0045ABFE /* EasyQ */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D184FF132F2E828F0045ABFE /* Build configuration list for PBXNativeTarget "LaunchOnAppOpen" */;
+			buildConfigurationList = D184FF132F2E828F0045ABFE /* Build configuration list for PBXNativeTarget "EasyQ" */;
 			buildPhases = (
 				D184FF042F2E828E0045ABFE /* Sources */,
 				D184FF052F2E828E0045ABFE /* Frameworks */,
 				D184FF062F2E828E0045ABFE /* Resources */,
 				D16C6E2E2F2EBFCB002954AD /* CopyFiles */,
+				5FDB1E172F6A7C11006D6D45 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				D16C6E282F2EBF77002954AD /* PBXTargetDependency */,
-				D16C6E2A2F2EBF87002954AD /* PBXTargetDependency */,
-				D16C6E2D2F2EBFAA002954AD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				D184FF0A2F2E828E0045ABFE /* LaunchOnAppOpen */,
+				D184FF0A2F2E828E0045ABFE /* EasyQ */,
 			);
-			name = LaunchOnAppOpen;
+			name = EasyQ;
 			packageProductDependencies = (
+				5FDB1E1F2F6A7D05006D6D45 /* SQLite */,
 			);
 			productName = LaunchOnAppOpen;
-			productReference = D184FF082F2E828E0045ABFE /* LaunchOnAppOpen.app */;
+			productReference = D184FF082F2E828E0045ABFE /* EasyQ.app */;
 			productType = "com.apple.product-type.application";
 		};
-		D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */ = {
+		D184FF192F2E837E0045ABFE /* EasyQAgent */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D184FF222F2E837F0045ABFE /* Build configuration list for PBXNativeTarget "LaunchOnAppOpenAgent" */;
+			buildConfigurationList = D184FF222F2E837F0045ABFE /* Build configuration list for PBXNativeTarget "EasyQAgent" */;
 			buildPhases = (
 				D184FF162F2E837E0045ABFE /* Sources */,
 				D184FF172F2E837E0045ABFE /* Frameworks */,
 				D184FF182F2E837E0045ABFE /* Resources */,
+				5FDB1E1D2F6A7C16006D6D45 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				D184FF1B2F2E837E0045ABFE /* LaunchOnAppOpenAgent */,
+				D184FF1B2F2E837E0045ABFE /* EasyQAgent */,
 			);
-			name = LaunchOnAppOpenAgent;
+			name = EasyQAgent;
 			packageProductDependencies = (
+				5FDB1E212F6A7D0A006D6D45 /* SQLite */,
 			);
 			productName = LaunchOnAppOpenAgent;
-			productReference = D184FF1A2F2E837E0045ABFE /* LaunchOnAppOpenAgent.app */;
+			productReference = D184FF1A2F2E837E0045ABFE /* EasyQAgent.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -171,7 +191,7 @@
 					};
 				};
 			};
-			buildConfigurationList = D184FF032F2E828E0045ABFE /* Build configuration list for PBXProject "LaunchOnAppOpen" */;
+			buildConfigurationList = D184FF032F2E828E0045ABFE /* Build configuration list for PBXProject "EasyQ" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -180,13 +200,16 @@
 			);
 			mainGroup = D184FEFF2F2E828E0045ABFE;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5FDB1E1E2F6A7CE7006D6D45 /* XCRemoteSwiftPackageReference "SQLite" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D184FF092F2E828E0045ABFE /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				D184FF072F2E828E0045ABFE /* LaunchOnAppOpen */,
-				D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */,
+				D184FF072F2E828E0045ABFE /* EasyQ */,
+				D184FF192F2E837E0045ABFE /* EasyQAgent */,
 			);
 		};
 /* End PBXProject section */
@@ -196,7 +219,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D16C6E262F2EBF77002954AD /* LaunchOnAppOpenAgent.app in Resources */,
+				D16C6E262F2EBF77002954AD /* EasyQAgent.app in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,18 +252,8 @@
 /* Begin PBXTargetDependency section */
 		D16C6E282F2EBF77002954AD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */;
+			target = D184FF192F2E837E0045ABFE /* EasyQAgent */;
 			targetProxy = D16C6E272F2EBF77002954AD /* PBXContainerItemProxy */;
-		};
-		D16C6E2A2F2EBF87002954AD /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */;
-			targetProxy = D16C6E292F2EBF87002954AD /* PBXContainerItemProxy */;
-		};
-		D16C6E2D2F2EBFAA002954AD /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = D184FF192F2E837E0045ABFE /* LaunchOnAppOpenAgent */;
-			targetProxy = D16C6E2C2F2EBFAA002954AD /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -297,11 +310,17 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = EasyQ;
+				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "我们需要访问桌面文件夹以建立文件索引。";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "我们需要访问文档文件夹以建立文件索引。";
+				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "我们需要访问下载文件夹以建立文件索引。";
+				INFOPLIST_KEY_NSRemovableVolumesUsageDescription = "我们需要访问外接设备以建立文件索引。";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.7;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = EasyQ;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -354,10 +373,16 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = EasyQ;
+				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "我们需要访问桌面文件夹以建立文件索引。";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "我们需要访问文档文件夹以建立文件索引。";
+				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "我们需要访问下载文件夹以建立文件索引。";
+				INFOPLIST_KEY_NSRemovableVolumesUsageDescription = "我们需要访问外接设备以建立文件索引。";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.7;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = EasyQ;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
@@ -390,9 +415,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyIndex;
+				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyQ;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -438,9 +463,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyIndex;
+				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyQ;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -482,9 +507,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyIndex.agent;
+				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyQ.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -526,9 +551,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyIndex.agent;
+				PRODUCT_BUNDLE_IDENTIFIER = icu.helltab.com.EasyQ.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -550,7 +575,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		D184FF032F2E828E0045ABFE /* Build configuration list for PBXProject "LaunchOnAppOpen" */ = {
+		D184FF032F2E828E0045ABFE /* Build configuration list for PBXProject "EasyQ" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D184FF112F2E828F0045ABFE /* Debug */,
@@ -559,7 +584,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D184FF132F2E828F0045ABFE /* Build configuration list for PBXNativeTarget "LaunchOnAppOpen" */ = {
+		D184FF132F2E828F0045ABFE /* Build configuration list for PBXNativeTarget "EasyQ" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D184FF142F2E828F0045ABFE /* Debug */,
@@ -568,7 +593,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D184FF222F2E837F0045ABFE /* Build configuration list for PBXNativeTarget "LaunchOnAppOpenAgent" */ = {
+		D184FF222F2E837F0045ABFE /* Build configuration list for PBXNativeTarget "EasyQAgent" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D184FF232F2E837F0045ABFE /* Debug */,
@@ -578,6 +603,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5FDB1E1E2F6A7CE7006D6D45 /* XCRemoteSwiftPackageReference "SQLite" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stephencelis/SQLite.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.16.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5FDB1E1F2F6A7D05006D6D45 /* SQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5FDB1E1E2F6A7CE7006D6D45 /* XCRemoteSwiftPackageReference "SQLite" */;
+			productName = SQLite;
+		};
+		5FDB1E212F6A7D0A006D6D45 /* SQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5FDB1E1E2F6A7CE7006D6D45 /* XCRemoteSwiftPackageReference "SQLite" */;
+			productName = SQLite;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D184FF002F2E828E0045ABFE /* Project object */;
 }

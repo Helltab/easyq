@@ -24,11 +24,11 @@ enum AppMonitor {
 
         RunLoop.main.run()
     }
-
+  
     private static func launchMainApp() {
         let runningApps = NSWorkspace.shared.runningApplications
         let isRunning = runningApps.contains { app in
-            return app.bundleIdentifier == "icu.helltab.com.EasyIndex"
+            return app.bundleIdentifier == "icu.helltab.com.EasyQ"
         }
         
         if !isRunning {

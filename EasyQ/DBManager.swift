@@ -1,42 +1,55 @@
 import Foundation
 import SQLite
 
-struct FileMetadata {
-  init() {
-    self.parent = ""
-    self.name = ""
-    self.size = 0
-    self.mtime = 0
-    self.isDir = false
-  }
-  init(parent: String, name: String, size: Int64, mtime: Int, isDir: Bool) {
-    self.parent = parent
-    self.name = name
-    self.size = size
-    self.mtime = mtime
-    self.isDir = isDir
-  }
+struct FileMetadata: Identifiable {
+  // 必须实现 id，Table 才能识别选中行
+  var id: String { "\(parent)/\(name)" }
+  
   var parent: String
   var name: String
   var size: Int64
-  var mtime: Int
+  var mtime: Int64 // 存储时通常是 Unix 时间戳
   var isDir: Bool
+  
+  // 格式化日期显示
+  var modificationDate: String {
+    
+    let date = Date(timeIntervalSince1970: TimeInterval(mtime))
+    
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    // 设置北京时区
+    formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+    
+    let dateString = formatter.string(from: date)
+    
+    return dateString
+  }
+  
+  // 格式化文件大小
+  var sizeString: String {
+    if isDir { return "--" }
+    let formatter = ByteCountFormatter()
+    formatter.allowedUnits = [.useAll]
+    formatter.countStyle = .file
+    return formatter.string(fromByteCount: size)
+  }
 }
 enum DatabaseError: Error {
-    case connectionFailed(String)
+  case connectionFailed(String)
 }
 func getDatabaseURL(name: String) -> URL {
-    // 获取用户目录下的 Application Support
-    let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-    let documentsDirectory = paths[0]
-    
-    // 创建以你 App 命名的子文件夹
-    let finalPath = documentsDirectory.appendingPathComponent("EasyQ")
-    
-    // 确保文件夹存在
-    try? FileManager.default.createDirectory(at: finalPath, withIntermediateDirectories: true)
-    
-    return finalPath.appendingPathComponent(name)
+  // 获取用户目录下的 Application Support
+  let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+  let documentsDirectory = paths[0]
+  
+  // 创建以你 App 命名的子文件夹
+  let finalPath = documentsDirectory.appendingPathComponent("EasyQ")
+  
+  // 确保文件夹存在
+  try? FileManager.default.createDirectory(at: finalPath, withIntermediateDirectories: true)
+  
+  return finalPath.appendingPathComponent(name)
 }
 class FileDatabase {
   private var db: Connection?
@@ -47,68 +60,64 @@ class FileDatabase {
   private let parent = Expression<String>("parent")
   private let name = Expression<String>("name")
   private let size = Expression<Int64>("size")
-  private let mtime = Expression<Int>("mtime")
+  private let mtime = Expression<Int64>("mtime")
   private let isDir = Expression<Bool>("is_dir")
   
   init(name: String) throws{
     
     do {
       let dbPath = getDatabaseURL(name: name).path(percentEncoded: false)
-      log("数据库位于: \(dbPath)")
       db = try Connection(dbPath)
-      try createTableAndIndices()
+      try? db?.execute("PRAGMA mmap_size = 1073741824;")
+      try? db?.execute("PRAGMA cache_size = -2000;")
     } catch {
-      log("数据库连接失败: \(error)")
+      print("数据库连接失败: \(error)")
       throw DatabaseError.connectionFailed(error.localizedDescription)
     }
   }
-  
-  private func createTableAndIndices() throws {
-    guard let db = db else { return }
+  func count() -> Int {
+    guard let db = db else { return 0 }
     
-    // 1. 创建表 (直接执行原生 SQL)
-    let createTableSQL = """
-          CREATE TABLE IF NOT EXISTS files (
-              id INTEGER PRIMARY KEY,
-              parent TEXT,
-              name TEXT,
-              size INTEGER,
-              mtime INTEGER,
-              is_dir INTEGER,
-              UNIQUE(parent, name)
-          );
-          """
-    try db.execute(createTableSQL)
-    
-    // 2. 创建索引 (直接执行原生 SQL)
-    // 注意：SQL 语法中已经包含了 IF NOT EXISTS，防止重复创建报错
-    try db.execute("CREATE INDEX IF NOT EXISTS idx_parent ON files(parent);")
-    try db.execute("CREATE INDEX IF NOT EXISTS idx_name ON files(name);")
-    try db.execute("CREATE INDEX IF NOT EXISTS idx_mtime ON files(mtime);")
-    
-    log("数据库 DDL 执行成功")
-  }
-  
-  func saveFiles(_ fileList: [FileMetadata]) {
-    guard let db = db else { return }
     
     do {
-      // 关键点：开启事务
-      try db.transaction {
-        for file in fileList {
-          try db.run(files.insert(
-            or: .replace, // 冲突时替换，对应你的 UNIQUE(parent, name)
-            self.parent <- file.parent,
-            self.name <- file.name,
-            self.size <- file.size,
-            self.mtime <- file.mtime,
-            self.isDir <- file.isDir
-          ))
-        }
-      }
-      log("成功入库 \(fileList.count) 条记录")
+      try db.execute("PRAGMA read_uncommitted = 1")
+      let count = try db.scalar(files.count)
+      try db.execute("PRAGMA read_uncommitted = 0")
+      return count
     } catch {
-      log("批量插入失败: \(error)")
+      print("统计失败: \(error)")
+      return 0
     }
   }
+  func searchFiles(keyword: String) -> [FileMetadata] {
+    guard let db = db else { return [] }
+    var results: [FileMetadata] = []
+    
+    do {
+      try db.execute("PRAGMA read_uncommitted = 1")
+      
+      let nameSort = Expression<String>("name")
+      let mtimeSort = Expression<String>("mtime")
+      // 构造查询语句：WHERE name LIKE '%keyword%'
+      let query = files.filter(name.like("%\(keyword)%"))
+        .order([mtimeSort.desc, nameSort.asc])
+        .limit(500)
+      
+      for row in try db.prepare(query) {
+        results.append(FileMetadata(
+          parent: row[parent],
+          name: row[name],
+          size: row[size],
+          mtime: row[mtime],
+          isDir: row[isDir]
+        ))
+      }
+      try db.execute("PRAGMA read_uncommitted = 0")
+    } catch {
+      print("查询出错: \(error)")
+    }
+    return results
+  }
+  
+  
 }

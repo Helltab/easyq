@@ -6,7 +6,7 @@ import Foundation
 func readDirNamesOnlyNameAttr(dirName: String) {
     let dirfd = open(dirName, O_RDONLY | O_DIRECTORY)
     guard dirfd >= 0 else {
-        print("无法打开目录: \(String(cString: strerror(errno)))")
+        log("无法打开目录: \(String(cString: strerror(errno)))")
         return
     }
     defer { close(dirfd) }
@@ -40,7 +40,7 @@ func readDirNamesOnlyNameAttr(dirName: String) {
             let retCount = getattrlistbulk(dirfd, &attrList, basePtr, bufferSize, 0)
             
             if retCount < 0 {
-                print("读取错误: \(String(cString: strerror(errno)))")
+                log("读取错误: \(String(cString: strerror(errno)))")
                 break
             }
             if retCount == 0 { break } // 读取完毕
@@ -74,11 +74,7 @@ func readDirNamesOnlyNameAttr(dirName: String) {
             for _ in 0..<retCount {
    
                 let entryLength = rawBuffer.load(fromByteOffset: entryOffset, as: UInt32.self)
-                for i in 0..<Int(entryLength) {
-                    let v = rawBuffer.load(fromByteOffset: entryOffset + i, as: UInt8.self)
-                    print(String(format:"%02X", v), terminator:" ")
-                }
-                print("")
+               
                 if matchCMNState(offset: entryOffset,
                                   state: UInt32(ATTR_CMN_ERROR)) {
                     entryOffset += Int(entryLength)
@@ -91,16 +87,16 @@ func readDirNamesOnlyNameAttr(dirName: String) {
                     let refOffset = entryOffset + MemoryLayout<UInt32>.size + MemoryLayout<attribute_set_t>.size
                     
                     let off = fetchNumericAttr(offset: refOffset, type: UInt32.self)
-                    print(off)
+                 
                     let fileName =  fetchStringAttr(offset: refOffset)
                     
                     if fileName != "." && fileName != ".." {
-                        print("找到文件: \(fileName)")
+                        log("找到文件: \(fileName)")
                     }
                 }
                 if matchFileState(offset: entryOffset,
                                   state: UInt32(ATTR_FILE_TOTALSIZE)) {
-                    print("找到文件 entryOffset: \(entryOffset)")
+                    log("找到文件 entryOffset: \(entryOffset)")
                 }
                 if matchCMNState(offset: entryOffset,
                                         state: UInt32(ATTR_CMN_FULLPATH)) {
@@ -113,7 +109,7 @@ func readDirNamesOnlyNameAttr(dirName: String) {
                    
                     let fullPath = fetchStringAttr(offset: refOffset)
                           
-                    print("路径: \(fullPath)")
+                    log("路径: \(fullPath)")
                     
                 }
                 

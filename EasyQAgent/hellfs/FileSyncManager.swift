@@ -1,5 +1,13 @@
 //
 //  FileSyncManager.swift
+//  EasyQ
+//
+//  Created by PP on 2026/3/18.
+//
+
+
+//
+//  FileSyncManager.swift
 //  hellfs
 //
 //  Created by PP on 2026/3/18.
@@ -18,7 +26,11 @@ class FileSyncManager {
   
   // 外部传入的文件监听流
   private var stream: FSEventStreamRef?
-  
+  private let excludedPaths: [String] = [
+    "\(NSHomeDirectory())/Library",
+    "\(NSHomeDirectory())/.Trash",
+    "\(NSHomeDirectory())/Downloads/.DS_Store"
+  ]
   // --- 1. 启动监听 ---
   func startMonitoring(paths: [String]) {
     var context = FSEventStreamContext(
@@ -30,8 +42,17 @@ class FileSyncManager {
     let callback: FSEventStreamCallback = { (stream, clientInfo, numEvents, eventPaths, eventFlags, eventIds) in
       let manager = Unmanaged<FileSyncManager>.fromOpaque(clientInfo!).takeUnretainedValue()
       let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as! [String]
+      let filteredPaths = paths.filter { path in
+        let url = URL(filePath: path)
+        let name = url.lastPathComponent
+        return !IgnoreSet.shouldIgnore(name: name)
+      }
       
-      manager.markPathsAsDirty(paths)
+      // 4. 如果过滤后还有路径，交给 manager 处理
+      if !filteredPaths.isEmpty {
+        manager.markPathsAsDirty(filteredPaths)
+      }
+      //      manager.markPathsAsDirty(paths)
     }
     
     stream = FSEventStreamCreate(
@@ -43,7 +64,7 @@ class FileSyncManager {
       1.0, // 系统层面的合并延迟
       UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
     )
-    
+    FSEventStreamSetExclusionPaths(stream!, excludedPaths as CFArray)
     FSEventStreamSetDispatchQueue(stream!, syncQueue)
     FSEventStreamStart(stream!)
   }
@@ -77,7 +98,7 @@ class FileSyncManager {
     
     let fileManager = FileManager.default
     
-    print("📁 正在分析 \(pathsToProcess.count) 条变更路径...")
+    log("📁 正在分析 \(pathsToProcess.count) 条变更路径...")
     
     // 2. 物理状态检查与分组
     for path in pathsToProcess {
@@ -98,16 +119,16 @@ class FileSyncManager {
     // 3. 执行批量分发
     // 使用 DispatchGroup 或直接同步调用，确保数据库事务的完整性
     if !deleteList.isEmpty {
-      print("🗑️ 准备删除: \(deleteList.count) 项")
+      log("🗑️ 准备删除: \(deleteList.count) 项")
       delegate?.syncDelete(deleteList)
     }
     
     if !updateList.isEmpty {
-      print("📝 准备更新/插入: \(updateList.count) 项")
+      log("📝 准备更新/插入: \(updateList.count) 项")
       delegate?.syncUpdate(updateList)
     }
     
-    print("✅ 批处理任务分发完成")
+    log("✅ 批处理任务分发完成")
   }
   
   
