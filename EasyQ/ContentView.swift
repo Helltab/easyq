@@ -17,9 +17,9 @@ struct ContentView: View {
         guard #available(macOS 13.0, *) else { return }
 
         let agent = SMAppService.loginItem(
-            identifier: "com.duhnnie.LaunchOnAppOpen.agent"
+            identifier: "icu.helltab.com.EasyIndex.agent"
         )
-        
+      print(agent.status.rawValue, " login status")
         do {
             enabled ? try agent.register() : try agent.unregister()
         } catch {

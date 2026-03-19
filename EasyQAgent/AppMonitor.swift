@@ -6,7 +6,7 @@ enum AppMonitor {
         
         
         let workspace = NSWorkspace.shared
-
+        print("Agent start")
         workspace.notificationCenter.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification,
             object: nil,
@@ -28,7 +28,7 @@ enum AppMonitor {
     private static func launchMainApp() {
         let runningApps = NSWorkspace.shared.runningApplications
         let isRunning = runningApps.contains { app in
-            return app.bundleIdentifier == "com.duhnnie.LaunchOnAppOpen"
+            return app.bundleIdentifier == "icu.helltab.com.EasyIndex"
         }
         
         if !isRunning {

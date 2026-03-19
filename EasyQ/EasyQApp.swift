@@ -1,9 +1,3 @@
-//
-//  LaunchOnAppOpenApp.swift
-//  LaunchOnAppOpen
-//
-//  Created by DanielSeq on 31/1/26.
-//
 
 import SwiftUI
 
