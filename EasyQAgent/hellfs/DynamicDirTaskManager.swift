@@ -4,10 +4,11 @@ class DynamicDirTaskManager: ScannerDelegate {
   
   
   private var scanner = FSScanner()
-  
-  
+
+
   private var fileDB: FileDatabase?
   private var monitor: FileSyncManager?
+  private var homePath: String = ""
   
   // 实现协议方法
   func scannerDidFindFolder(_ path: String) {
@@ -71,6 +72,8 @@ class DynamicDirTaskManager: ScannerDelegate {
     self.fileDB?.upsert(items:  files)
   }
   func initTask(_ path: String) {
+    self.homePath = path
+    self.scanner.homeDepth = path.components(separatedBy: "/").count
     let has = self.fileDB?.hasFiles()
     if !(has ?? false) {
       addTask(path)
