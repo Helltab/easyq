@@ -64,6 +64,18 @@ struct FileSearchView: View {
         .padding([.top, .leading])
         .buttonStyle(.borderedProminent)
         .tint(.blue)
+
+        Button(action: {
+          rebuildIndex()
+        }) {
+          HStack {
+            Image(systemName: "trash")
+            Text("重建索引")
+          }
+        }
+        .padding(.leading)
+        .buttonStyle(.bordered)
+        .tint(.red)
         
         VStack(spacing: 10) {
           Text("索引统计")
@@ -166,6 +178,17 @@ struct FileSearchView: View {
       deliverImmediately: true
     )
     print("✅ 已确认并发送指令: \(pendingPath)")
+  }
+
+  private func rebuildIndex() {
+    let dc = DistributedNotificationCenter.default()
+    dc.postNotificationName(
+      NSNotification.Name("com.easyq.agent.forceScan"),
+      object: nil,
+      userInfo: ["rebuild": true],
+      deliverImmediately: true
+    )
+    print("✅ 已发送全量重建指令")
   }
   
   private var searchKeywords: [String] {

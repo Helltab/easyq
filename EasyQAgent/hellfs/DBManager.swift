@@ -241,4 +241,19 @@ class FileDatabase {
       log("❌ FTS5 索引重建失败: \(error)")
     }
   }
+
+  /// 清空所有数据（主表 + FTS5 索引），用于全量重建
+  func clearAll() {
+    guard let db = db else { return }
+
+    do {
+      try db.transaction {
+        try db.run("DELETE FROM files_fts")
+        try db.run(files.delete())
+      }
+      log("✅ 数据库已清空")
+    } catch {
+      log("❌ 清空数据库失败: \(error)")
+    }
+  }
 }

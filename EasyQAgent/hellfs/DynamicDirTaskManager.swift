@@ -90,6 +90,13 @@ class DynamicDirTaskManager: ScannerDelegate {
     self.fileDB?.delete(items: [file])
     addTask(path)
   }
+
+  /// 清空数据库并重新全量扫描
+  func rebuildAll() {
+    log("开始全量重建索引")
+    self.fileDB?.clearAll()
+    addTask(homePath)
+  }
   
   
   private func process(_ path: String) async {

@@ -55,11 +55,14 @@ Task {
     object: nil,
     queue: .main
   ) { notification in
-    if let path = notification.userInfo?["targetPath"] as? String {
+    let rebuild = notification.userInfo?["rebuild"] as? Bool ?? false
+    if rebuild {
+      log("🤖 Agent 收到指令：全量重建索引")
+      ddtm.rebuildAll()
+    } else if let path = notification.userInfo?["targetPath"] as? String {
       log("🤖 Agent 收到指令：立即扫描路径 \(path)")
       ddtm.forceRefresh(path)
     }
-    
   }
 }
 RunLoop.main.run(until: Date.distantFuture)
