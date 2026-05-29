@@ -89,20 +89,26 @@ class FileDatabase {
       return 0
     }
   }
-  func searchFiles(keyword: String) -> [FileMetadata] {
-    guard let db = db else { return [] }
+  func searchFiles(keywords: [String]) -> [FileMetadata] {
+    guard let db = db, !keywords.isEmpty else { return [] }
     var results: [FileMetadata] = []
-    
+
     do {
       try db.execute("PRAGMA read_uncommitted = 1")
-      
+
       let nameSort = Expression<String>("name")
       let mtimeSort = Expression<String>("mtime")
-      // 构造查询语句：WHERE name LIKE '%keyword%'
-      let query = files.filter(name.like("%\(keyword)%"))
+
+      // 多关键词 AND 匹配：每个词都必须出现在文件名中
+      var condition: SQLite.Expression<Bool> = name.like("%\(keywords[0])%")
+      for kw in keywords.dropFirst() {
+        condition = condition && name.like("%\(kw)%")
+      }
+
+      let query = files.filter(condition)
         .order([mtimeSort.desc, nameSort.asc])
         .limit(500)
-      
+
       for row in try db.prepare(query) {
         results.append(FileMetadata(
           parent: row[parent],

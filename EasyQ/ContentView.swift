@@ -164,17 +164,25 @@ struct FileSearchView: View {
     print("✅ 已确认并发送指令: \(pendingPath)")
   }
   
+  private var searchKeywords: [String] {
+    searchText.split(separator: " ").map { String($0) }.filter { !$0.isEmpty }
+  }
+
   private func performSearch() {
-    if searchText.isEmpty {
+    let kws = searchKeywords
+    if kws.isEmpty {
       files = []
     } else {
-      files = dbManager?.searchFiles(keyword: searchText) ?? []
+      files = dbManager?.searchFiles(keywords: kws) ?? []
     }
   }
   // 过滤逻辑
   var filteredFiles: [FileMetadata] {
-    if searchText.isEmpty { return files }
-    return files.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    let kws = searchKeywords
+    if kws.isEmpty { return files }
+    return files.filter { file in
+      kws.allSatisfy { file.name.localizedCaseInsensitiveContains($0) }
+    }
   }
   
   // 跳转到 Finder 的核心方法
