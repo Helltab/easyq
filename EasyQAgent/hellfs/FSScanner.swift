@@ -183,9 +183,14 @@ class FSScanner {
 
           }
 
+          // 读取文件类型，跳过符号链接和特殊文件（socket、pipe 等）
+          var fileType: vtype = VNON
           if returned.commonattr & UInt32(ATTR_CMN_OBJTYPE) != 0 {
-            let vt = reader.read(vtype.self)
-            file.isDir =  vt == VDIR
+            fileType = reader.read(vtype.self)
+            file.isDir = fileType == VDIR
+          }
+          if fileType == VLNK || fileType == VSOCK || fileType == VFIFO || fileType == VCHR || fileType == VBLK {
+            continue
           }
 
           if returned.commonattr & UInt32(ATTR_CMN_OBJTAG) != 0 {
