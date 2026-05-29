@@ -16,7 +16,7 @@ private enum DetailMode: String, CaseIterable {
 struct FileSearchView: View {
   @State private var searchText = ""
   @State private var files: [FileMetadata] = [] // 这里存放搜索结果
-  @State private var selectedFileID: FileMetadata.ID?
+  @State private var selectedFileIDs = Set<FileMetadata.ID>()
   @State private var showingConfirmAlert = false
   @State private var pendingPath: String = ""
   @State private var searchTask: Task<Void, Never>? = nil
@@ -128,7 +128,7 @@ struct FileSearchView: View {
         .padding(.vertical, 8)
 
         // --- 右侧表格 ---
-        Table(displayedFiles, selection: $selectedFileID) {
+        Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
           TableColumn("大小", value: \.sizeString)
           TableColumn("类型") { item in
@@ -139,18 +139,31 @@ struct FileSearchView: View {
           }
         }
         .contextMenu {
-          if let selectedFile = displayedFiles.first(where: { $0.id == selectedFileID }) {
-            Button("在 Finder 中显示") {
-              revealInFinder(url: selectedFile.parent + "/" + selectedFile.name)
+          let selectedFiles = displayedFiles.filter { selectedFileIDs.contains($0.id) }
+          if !selectedFiles.isEmpty {
+            if selectedFiles.count == 1 {
+              Button("在 Finder 中显示") {
+                revealInFinder(url: selectedFiles[0].parent + "/" + selectedFiles[0].name)
+              }
+            } else {
+              Button("在 Finder 中显示 (\(selectedFiles.count) 项)") {
+                for file in selectedFiles {
+                  revealInFinder(url: file.parent + "/" + file.name)
+                }
+              }
             }
             Divider()
             if detailMode == .search {
-              Button("添加到工作区") {
-                workspace.add(selectedFile)
+              Button("添加到工作区 (\(selectedFiles.count) 项)") {
+                for file in selectedFiles {
+                  workspace.add(file)
+                }
               }
             } else {
-              Button("从工作区移除") {
-                workspace.remove(selectedFile)
+              Button("从工作区移除 (\(selectedFiles.count) 项)") {
+                for file in selectedFiles {
+                  workspace.remove(file)
+                }
               }
             }
           }
@@ -158,15 +171,18 @@ struct FileSearchView: View {
         // 双击打开 Finder
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
-          if let selectedFile = displayedFiles.first(where: { $0.id == selectedFileID }) {
-            revealInFinder(url: selectedFile.parent + "/" + selectedFile.name)
+          if let first = selectedFileIDs.first,
+             let file = displayedFiles.first(where: { $0.id == first }) {
+            revealInFinder(url: file.parent + "/" + file.name)
           }
         }
         // Cmd+单击打开 Finder
         .onTapGesture {
           if NSEvent.modifierFlags.contains(.command) {
-            if let selectedFile = displayedFiles.first(where: { $0.id == selectedFileID }) {
-              revealInFinder(url: selectedFile.parent + "/" + selectedFile.name)
+            for id in selectedFileIDs {
+              if let file = displayedFiles.first(where: { $0.id == id }) {
+                revealInFinder(url: file.parent + "/" + file.name)
+              }
             }
           }
         }
