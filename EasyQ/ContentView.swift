@@ -36,7 +36,7 @@ struct FileSearchView: View {
             // 2. 开启新任务
             searchTask = Task {
               // 3. 等待 300 毫秒 (0.3秒)
-              try? await Task.sleep(nanoseconds: 200_000_000)
+              try? await Task.sleep(nanoseconds: 150_000_000)
               
               // 4. 如果任务没被取消，则执行搜索
               if !Task.isCancelled {
