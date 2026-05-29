@@ -36,16 +36,50 @@ struct FileSearchView: View {
     NavigationSplitView {
       // --- 左侧栏 ---
       VStack(alignment: .leading, spacing: 0) {
-        // 搜索区域
         Text("EasyQ")
           .font(.title2.bold())
           .padding(.top, 16)
           .padding(.horizontal)
 
+        // 索引管理
+        VStack(alignment: .leading, spacing: 6) {
+          HStack {
+            Text("索引")
+              .font(.caption.bold())
+              .foregroundColor(.secondary)
+            Spacer()
+            Text("\(totalCount)")
+              .font(.system(size: 14, weight: .semibold, design: .monospaced))
+              .foregroundColor(.blue)
+              .contentTransition(.numericText())
+          }
+
+          Button(action: { selectFolder() }) {
+            Label("强制刷新...", systemImage: "arrow.clockwise")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .foregroundColor(.primary)
+
+          Button(action: { showingRebuildAlert = true }) {
+            Label("重建索引...", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .foregroundColor(.red)
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .onAppear(perform: refreshData)
+        .onReceive(timer) { _ in refreshData() }
+
+        Divider()
+          .padding(.vertical, 10)
+
+        // 搜索区域
         TextField("输入关键词搜索...", text: $searchText)
           .textFieldStyle(.roundedBorder)
           .padding(.horizontal)
-          .padding(.top, 12)
           .onChange(of: searchText, perform: { _ in
             searchTask?.cancel()
             searchTask = Task {
@@ -56,45 +90,7 @@ struct FileSearchView: View {
             }
           })
 
-        // 操作按钮
-        Button(action: { selectFolder() }) {
-          Label("强制刷新索引", systemImage: "arrow.clockwise")
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(.blue)
-        .padding(.horizontal)
-        .padding(.top, 12)
-
-        Divider()
-          .padding(.vertical, 12)
-
-        // 索引统计
-        HStack {
-          Text("已索引文件")
-            .font(.caption)
-            .foregroundColor(.secondary)
-          Spacer()
-          Text("\(totalCount)")
-            .font(.system(size: 18, weight: .semibold, design: .monospaced))
-            .foregroundColor(.blue)
-            .contentTransition(.numericText())
-        }
-        .padding(.horizontal)
-        .onAppear(perform: refreshData)
-        .onReceive(timer) { _ in refreshData() }
-
         Spacer()
-
-        // 底部危险操作
-        Divider()
-        Button(action: { showingRebuildAlert = true }) {
-          Label("重建索引...", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
       }
       .navigationSplitViewColumnWidth(min: 200, ideal: 240)
       .alert("确认同步该目录？", isPresented: $showingFolderAlert) {
