@@ -54,6 +54,8 @@ struct FileSearchView: View {
   @State private var detailMode: DetailMode = .search
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
+  @StateObject private var searchHistory = SearchHistoryManager()
+  @FocusState private var searchFieldFocused: Bool
 
   let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
@@ -89,6 +91,7 @@ struct FileSearchView: View {
           .textFieldStyle(.roundedBorder)
           .padding(.horizontal)
           .padding(.top, 12)
+          .focused($searchFieldFocused)
           .onChange(of: searchText, perform: { _ in
             searchTask?.cancel()
             searchTask = Task {
@@ -98,6 +101,48 @@ struct FileSearchView: View {
               }
             }
           })
+
+        // 搜索历史（聚焦且无输入时显示）
+        if searchFieldFocused && searchText.isEmpty && !searchHistory.history.isEmpty {
+          VStack(alignment: .leading, spacing: 0) {
+            HStack {
+              Text("搜索历史")
+                .font(.caption)
+                .foregroundColor(.secondary)
+              Spacer()
+              Button("清除") { searchHistory.clear() }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            ForEach(searchHistory.history, id: \.self) { item in
+              HStack {
+                Image(systemName: "clock")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+                Text(item)
+                  .font(.system(size: 13))
+                  .lineLimit(1)
+                Spacer()
+                Button(action: { searchHistory.remove(item) }) {
+                  Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+              }
+              .padding(.horizontal)
+              .padding(.vertical, 3)
+              .contentShape(Rectangle())
+              .onTapGesture {
+                searchText = item
+              }
+            }
+          }
+        }
 
         // 视图列表
         viewList
@@ -326,6 +371,7 @@ struct FileSearchView: View {
       files = []
       return
     }
+    searchHistory.add(searchText)
     DispatchQueue.global(qos: .userInitiated).async {
       let results = self.dbManager?.searchFiles(keywords: kws) ?? []
       DispatchQueue.main.async {
