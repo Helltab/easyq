@@ -12,6 +12,37 @@ private enum DetailMode: String, CaseIterable {
   case workspace = "工作区"
 }
 
+// MARK: - FocusedValue keys for menu bar commands
+
+struct FocusedIndexCountKey: FocusedValueKey {
+  typealias Value = Int
+}
+
+struct FocusedSelectFolderKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+struct FocusedRebuildKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var indexCount: Int? {
+    get { self[FocusedIndexCountKey.self] }
+    set { self[FocusedIndexCountKey.self] = newValue }
+  }
+  var selectFolder: (() -> Void)? {
+    get { self[FocusedSelectFolderKey.self] }
+    set { self[FocusedSelectFolderKey.self] = newValue }
+  }
+  var rebuildIndex: (() -> Void)? {
+    get { self[FocusedRebuildKey.self] }
+    set { self[FocusedRebuildKey.self] = newValue }
+  }
+}
+
+// MARK: - Main View
+
 struct FileSearchView: View {
   @State private var searchText = ""
   @State private var files: [FileMetadata] = []
@@ -34,52 +65,17 @@ struct FileSearchView: View {
 
   var body: some View {
     NavigationSplitView {
-      // --- 左侧栏 ---
       VStack(alignment: .leading, spacing: 0) {
         Text("EasyQ")
           .font(.title2.bold())
           .padding(.top, 16)
           .padding(.horizontal)
 
-        // 索引管理
-        VStack(alignment: .leading, spacing: 6) {
-          HStack {
-            Text("索引")
-              .font(.caption.bold())
-              .foregroundColor(.secondary)
-            Spacer()
-            Text("\(totalCount)")
-              .font(.system(size: 14, weight: .semibold, design: .monospaced))
-              .foregroundColor(.blue)
-              .contentTransition(.numericText())
-          }
-
-          Button(action: { selectFolder() }) {
-            Label("强制刷新...", systemImage: "arrow.clockwise")
-              .font(.caption)
-          }
-          .buttonStyle(.plain)
-          .foregroundColor(.primary)
-
-          Button(action: { showingRebuildAlert = true }) {
-            Label("重建索引...", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
-              .font(.caption)
-          }
-          .buttonStyle(.plain)
-          .foregroundColor(.red)
-        }
-        .padding(.horizontal)
-        .padding(.top, 12)
-        .onAppear(perform: refreshData)
-        .onReceive(timer) { _ in refreshData() }
-
-        Divider()
-          .padding(.vertical, 10)
-
         // 搜索区域
         TextField("输入关键词搜索...", text: $searchText)
           .textFieldStyle(.roundedBorder)
           .padding(.horizontal)
+          .padding(.top, 12)
           .onChange(of: searchText, perform: { _ in
             searchTask?.cancel()
             searchTask = Task {
@@ -100,7 +96,7 @@ struct FileSearchView: View {
         Text("即将深度扫描并更新数据库：\n\(pendingPath)")
       }
       .alert("确认重建索引？", isPresented: $showingRebuildAlert) {
-        Button("重建", role: .destructive) { rebuildIndex() }
+        Button("重建", role: .destructive) { doRebuildIndex() }
         Button("取消", role: .cancel) { }
       } message: {
         Text("将清空全部索引数据并从头扫描，耗时较长。\n此操作不可撤销。")
@@ -108,7 +104,6 @@ struct FileSearchView: View {
 
     } detail: {
       VStack(spacing: 0) {
-        // 顶部切换栏
         Picker("", selection: $detailMode) {
           ForEach(DetailMode.allCases, id: \.self) { mode in
             Text(mode.rawValue).tag(mode)
@@ -118,7 +113,6 @@ struct FileSearchView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
 
-        // 表格
         Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
           TableColumn("大小", value: \.sizeString)
@@ -179,6 +173,12 @@ struct FileSearchView: View {
         }
       }
     }
+    // 暴露给菜单栏
+    .focusedSceneValue(\.indexCount, totalCount)
+    .focusedSceneValue(\.selectFolder, selectFolder)
+    .focusedSceneValue(\.rebuildIndex, { showingRebuildAlert = true })
+    .onAppear(perform: refreshData)
+    .onReceive(timer) { _ in refreshData() }
   }
 
   func refreshData() {
@@ -211,7 +211,7 @@ struct FileSearchView: View {
     )
   }
 
-  private func rebuildIndex() {
+  private func doRebuildIndex() {
     DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("com.easyq.agent.forceScan"),
       object: nil,
