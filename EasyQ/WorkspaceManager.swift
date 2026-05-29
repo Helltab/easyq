@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 class WorkspaceManager: ObservableObject {
   @Published var items: [FileMetadata] = []
