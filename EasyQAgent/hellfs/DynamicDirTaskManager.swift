@@ -1,14 +1,15 @@
 import Foundation
 
 class DynamicDirTaskManager: ScannerDelegate {
-  
-  
+
+
   private var scanner = FSScanner()
 
 
   private var fileDB: FileDatabase?
   private var monitor: FileSyncManager?
   private var homePath: String = ""
+  private var pendingTasks: Int = 0
   
   // 实现协议方法
   func scannerDidFindFolder(_ path: String) {
@@ -81,6 +82,7 @@ class DynamicDirTaskManager: ScannerDelegate {
   }
   // 扫描器：动态调用此方法添加任务
   func addTask(_ path: String) {
+    pendingTasks += 1
     continuation?.yield(path)
   }
   func forceRefresh(_ path: String) {
@@ -101,8 +103,20 @@ class DynamicDirTaskManager: ScannerDelegate {
   
   private func process(_ path: String) async {
     log("正在处理动态文件夹: \(path)")
+
+    // 通知 GUI 当前扫描进度
+    DispatchQueue.main.async {
+      DistributedNotificationCenter.default().postNotificationName(
+        NSNotification.Name("com.easyq.agent.scanProgress"),
+        object: nil,
+        userInfo: ["currentPath": path, "pendingTasks": self.pendingTasks],
+        deliverImmediately: true
+      )
+    }
+
     let files = scanner.scanDirectory(path)
     fileDB?.saveFiles(files)
+    pendingTasks -= 1
 
     // 初始扫描完成后通知 GUI 重建视图
     if path == homePath {

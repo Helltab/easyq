@@ -51,6 +51,7 @@ struct FileSearchView: View {
   @State private var pendingPath: String = ""
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
+  @State private var scanStatus: String = ""
   @State private var detailMode: DetailMode = .search
   @State private var sortOption: SortOption = .modificationTime
   @State private var regexMode: Bool = false
@@ -166,6 +167,20 @@ struct FileSearchView: View {
         viewList
 
         Spacer()
+
+        // 扫描状态
+        if !scanStatus.isEmpty {
+          HStack(spacing: 4) {
+            ProgressView()
+              .controlSize(.mini)
+            Text(scanStatus)
+              .font(.caption)
+              .foregroundColor(.secondary)
+              .lineLimit(1)
+          }
+          .padding(.horizontal)
+          .padding(.bottom, 8)
+        }
       }
       .navigationSplitViewColumnWidth(min: 200, ideal: 240)
       .sheet(isPresented: $showingNewView) {
@@ -325,8 +340,16 @@ struct FileSearchView: View {
     }
     .onReceive(timer) { _ in refreshData() }
     .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanComplete"))) { _ in
-      // 扫描完成后自动重建所有视图
+      scanStatus = ""
       rebuildAllViews()
+    }
+    .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanProgress"))) { notification in
+      if let info = notification.userInfo,
+         let path = info["currentPath"] as? String,
+         let pending = info["pendingTasks"] as? Int {
+        let shortPath = path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+        scanStatus = "扫描中: \(shortPath) (\(pending) 队列)"
+      }
     }
   }
 
