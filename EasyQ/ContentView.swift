@@ -157,6 +157,24 @@ struct FileSearchView: View {
                 for file in selectedFiles { workspace.remove(file) }
               }
             }
+            Divider()
+            Button("复制路径") {
+              let paths = selectedFiles.map { $0.parent + "/" + $0.name }
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.writeObjects(paths as [NSPasteboardWriting])
+            }
+            if selectedFiles.count == 1 {
+              Button("用默认应用打开") {
+                let url = URL(fileURLWithPath: selectedFiles[0].parent + "/" + selectedFiles[0].name)
+                NSWorkspace.shared.open(url)
+              }
+            }
+            Button("移到废纸篓", role: .destructive) {
+              for file in selectedFiles {
+                let url = URL(fileURLWithPath: file.parent + "/" + file.name)
+                try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+              }
+            }
           }
         }
         .contentShape(Rectangle())
