@@ -162,6 +162,60 @@ class FileDatabase {
     }
     return results
   }
-  
-  
+
+  // MARK: - 视图规则查询
+
+  func searchWithRules(_ rules: [ViewRule], limit: Int = 10000) -> [FileMetadata] {
+    guard let db = db, !rules.isEmpty else { return [] }
+    var results: [FileMetadata] = []
+
+    var whereClauses: [String] = []
+    var params: [Binding?] = []
+
+    for rule in rules {
+      switch rule {
+      case .extensions(let exts):
+        // (name LIKE '%.pdf' OR name LIKE '%.docx')
+        let parts = exts.map { ext -> String in
+          params.append(".\(ext)")
+          return "name LIKE '%' || ?"
+        }
+        whereClauses.append("(\(parts.joined(separator: " OR ")))")
+
+      case .filenameContains(let keywords):
+        // (name LIKE '%keyword1%' AND name LIKE '%keyword2%')
+        for kw in keywords {
+          params.append(kw)
+          whereClauses.append("name LIKE '%' || ? || '%'")
+        }
+
+      case .modifiedAfter(let date):
+        params.append(Int64(date.timeIntervalSince1970))
+        whereClauses.append("mtime > ?")
+
+      case .customSQL(let sql):
+        whereClauses.append("(\(sql))")
+      }
+    }
+
+    let whereStr = whereClauses.joined(separator: " AND ")
+    let sql = "SELECT parent, name, size, mtime, is_dir FROM files WHERE \(whereStr) ORDER BY mtime DESC LIMIT \(limit)"
+
+    do {
+      try db.execute("PRAGMA read_uncommitted = 1")
+      for row in try db.prepare(sql, params) {
+        results.append(FileMetadata(
+          parent: row[0] as! String,
+          name: row[1] as! String,
+          size: row[2] as! Int64,
+          mtime: row[3] as! Int64,
+          isDir: (row[4] as! Int64) != 0
+        ))
+      }
+      try db.execute("PRAGMA read_uncommitted = 0")
+    } catch {
+      print("视图查询出错: \(error)")
+    }
+    return results
+  }
 }
