@@ -46,7 +46,7 @@ struct FileSearchView: View {
           .textFieldStyle(.roundedBorder)
           .padding(.horizontal)
           .padding(.top, 12)
-          .onChange(of: searchText) {
+          .onChange(of: searchText, perform: { _ in
             searchTask?.cancel()
             searchTask = Task {
               try? await Task.sleep(nanoseconds: 150_000_000)
@@ -54,7 +54,7 @@ struct FileSearchView: View {
                 performSearch()
               }
             }
-          }
+          })
 
         // 操作按钮
         Button(action: { selectFolder() }) {
