@@ -90,7 +90,7 @@ class FileDatabase {
       try? db?.execute("PRAGMA cache_size = -2000;")
 
       // 注册 REGEXP 自定义函数
-      try db?.createFunction("regexp", deterministic: true) { (pattern: String, value: String) -> Bool in
+      _ = try db?.createFunction("regexp", deterministic: true) { (pattern: String, value: String) -> Bool in
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         let range = NSRange(value.startIndex..., in: value)
         return regex.firstMatch(in: value, range: range) != nil
@@ -236,7 +236,7 @@ class FileDatabase {
     var results: [FileMetadata] = []
 
     var whereClauses: [String] = []
-    var params: [Binding?] = []
+    var params: [SQLite.Binding?] = []
 
     for rule in rules {
       switch rule {
