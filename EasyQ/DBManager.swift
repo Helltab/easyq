@@ -96,31 +96,68 @@ class FileDatabase {
     do {
       try db.execute("PRAGMA read_uncommitted = 1")
 
-      let nameSort = Expression<String>("name")
-      let mtimeSort = Expression<String>("mtime")
-
-      // 多关键词 AND 匹配：每个词都必须出现在文件名中
-      var condition: SQLite.Expression<Bool> = name.like("%\(keywords[0])%")
-      for kw in keywords.dropFirst() {
-        condition = condition && name.like("%\(kw)%")
+      // 优先使用 FTS5 全文索引查询
+      if let ftsResults = try? searchWithFTS(db: db, keywords: keywords) {
+        results = ftsResults
+      } else {
+        // 兜底：FTS5 表不存在时使用 LIKE 查询
+        results = searchWithLIKE(db: db, keywords: keywords)
       }
 
-      let query = files.filter(condition)
-        .order([mtimeSort.desc, nameSort.asc])
-        .limit(500)
-
-      for row in try db.prepare(query) {
-        results.append(FileMetadata(
-          parent: row[parent],
-          name: row[name],
-          size: row[size],
-          mtime: row[mtime],
-          isDir: row[isDir]
-        ))
-      }
       try db.execute("PRAGMA read_uncommitted = 0")
     } catch {
       print("查询出错: \(error)")
+    }
+    return results
+  }
+
+  /// FTS5 全文索引查询
+  private func searchWithFTS(db: Connection, keywords: [String]) throws -> [FileMetadata] {
+    // 每个关键词用双引号包裹作为短语匹配，空格分隔表示 AND
+    let matchQuery = keywords.map { "\"\($0)\"" }.joined(separator: " ")
+
+    let sql = """
+      SELECT f.parent, f.name, f.size, f.mtime, f.is_dir
+      FROM files_fts fts
+      JOIN files f ON f.id = fts.rowid
+      WHERE files_fts MATCH ?
+      ORDER BY f.mtime DESC
+      LIMIT 500
+      """
+
+    var results: [FileMetadata] = []
+    for row in try db.prepare(sql, [matchQuery]) {
+      results.append(FileMetadata(
+        parent: row[0] as! String,
+        name: row[1] as! String,
+        size: row[2] as! Int64,
+        mtime: row[3] as! Int64,
+        isDir: (row[4] as! Int64) != 0
+      ))
+    }
+    return results
+  }
+
+  /// LIKE 兜底查询
+  private func searchWithLIKE(db: Connection, keywords: [String]) -> [FileMetadata] {
+    var condition: SQLite.Expression<Bool> = name.like("%\(keywords[0])%")
+    for kw in keywords.dropFirst() {
+      condition = condition && name.like("%\(kw)%")
+    }
+
+    let query = files.filter(condition)
+      .order([Expression<String>("mtime").desc, Expression<String>("name").asc])
+      .limit(500)
+
+    var results: [FileMetadata] = []
+    for row in (try? db.prepare(query)) ?? [] {
+      results.append(FileMetadata(
+        parent: row[parent],
+        name: row[name],
+        size: row[size],
+        mtime: row[mtime],
+        isDir: row[isDir]
+      ))
     }
     return results
   }
