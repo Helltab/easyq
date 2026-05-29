@@ -150,7 +150,8 @@ class FileDatabase {
       .limit(500)
 
     var results: [FileMetadata] = []
-    for row in (try? db.prepare(query)) ?? [] {
+    guard let rows = try? db.prepare(query) else { return results }
+    for row in rows {
       results.append(FileMetadata(
         parent: row[parent],
         name: row[name],
