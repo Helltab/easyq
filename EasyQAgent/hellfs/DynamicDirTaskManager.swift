@@ -103,5 +103,16 @@ class DynamicDirTaskManager: ScannerDelegate {
     log("正在处理动态文件夹: \(path)")
     let files = scanner.scanDirectory(path)
     fileDB?.saveFiles(files)
+
+    // 初始扫描完成后通知 GUI 重建视图
+    if path == homePath {
+      DispatchQueue.main.async {
+        DistributedNotificationCenter.default().postNotificationName(
+          NSNotification.Name("com.easyq.agent.scanComplete"),
+          object: nil,
+          deliverImmediately: true
+        )
+      }
+    }
   }
 }
