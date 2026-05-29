@@ -14,17 +14,21 @@ class ViewManager: ObservableObject {
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     saveURL = dir.appendingPathComponent("views.json")
 
-    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    viewsRoot = documents.appendingPathComponent("easyQ/views")
+    viewsRoot = dir.appendingPathComponent("views")
+
+    try? FileManager.default.createDirectory(at: viewsRoot, withIntermediateDirectories: true)
 
     load()
   }
 
   // MARK: - CRUD
 
-  func add(_ view: ViewConfig) {
+  func add(_ view: ViewConfig, db: FileDatabase? = nil) {
     views.append(view)
     save()
+    if let db = db {
+      rebuildView(view, db: db)
+    }
   }
 
   func remove(_ view: ViewConfig) {

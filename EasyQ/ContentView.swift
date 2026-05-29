@@ -11,7 +11,6 @@ extension String {
 private enum DetailMode: String, CaseIterable {
   case search = "搜索结果"
   case workspace = "工作区"
-  case views = "视图"
 }
 
 // MARK: - FocusedValue keys
@@ -53,8 +52,6 @@ struct FileSearchView: View {
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
   @State private var detailMode: DetailMode = .search
-  @State private var selectedViewID: UUID?
-  @State private var viewFiles: [FileMetadata] = []
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
 
@@ -62,15 +59,10 @@ struct FileSearchView: View {
 
   private var dbManager: FileDatabase? = try? FileDatabase(name: "easyqfiles.db")
 
-  private var selectedView: ViewConfig? {
-    viewManager.views.first { $0.id == selectedViewID }
-  }
-
   private var displayedFiles: [FileMetadata] {
     switch detailMode {
     case .search: return files
     case .workspace: return workspace.items
-    case .views: return viewFiles
     }
   }
 
@@ -92,31 +84,29 @@ struct FileSearchView: View {
         .padding(.horizontal)
         .padding(.top, 12)
 
-        if detailMode == .views {
-          // 视图列表
-          viewList
-        } else {
-          // 搜索框
-          TextField("输入关键词搜索...", text: $searchText)
-            .textFieldStyle(.roundedBorder)
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .onChange(of: searchText, perform: { _ in
-              searchTask?.cancel()
-              searchTask = Task {
-                try? await Task.sleep(nanoseconds: 150_000_000)
-                if !Task.isCancelled {
-                  performSearch()
-                }
+        // 搜索框
+        TextField("输入关键词搜索...", text: $searchText)
+          .textFieldStyle(.roundedBorder)
+          .padding(.horizontal)
+          .padding(.top, 12)
+          .onChange(of: searchText, perform: { _ in
+            searchTask?.cancel()
+            searchTask = Task {
+              try? await Task.sleep(nanoseconds: 150_000_000)
+              if !Task.isCancelled {
+                performSearch()
               }
-            })
-        }
+            }
+          })
+
+        // 视图列表
+        viewList
 
         Spacer()
       }
       .navigationSplitViewColumnWidth(min: 200, ideal: 240)
       .sheet(isPresented: $showingNewView) {
-        NewViewSheet(viewManager: viewManager)
+        NewViewSheet(viewManager: viewManager, dbManager: dbManager)
       }
       .alert("确认同步该目录？", isPresented: $showingFolderAlert) {
         Button("开始扫描") { confirmAndSendToAgent() }
@@ -133,20 +123,6 @@ struct FileSearchView: View {
 
     } detail: {
       VStack(spacing: 0) {
-        // 视图模式下显示选中视图信息
-        if detailMode == .views, let view = selectedView {
-          HStack {
-            Text(view.name)
-              .font(.headline)
-            Spacer()
-            Text("\(viewFiles.count) 个文件")
-              .font(.caption)
-              .foregroundColor(.secondary)
-          }
-          .padding(.horizontal)
-          .padding(.vertical, 8)
-        }
-
         Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
           TableColumn("大小", value: \.sizeString)
@@ -182,20 +158,6 @@ struct FileSearchView: View {
               }
             }
           }
-          if detailMode == .views, selectedView != nil {
-            Divider()
-            Button("在 Finder 中打开视图文件夹") {
-              if let view = selectedView {
-                revealInFinder(url: viewManager.viewDirectory(for: view).path)
-              }
-            }
-            Button("重建此视图") {
-              if let view = selectedView, let db = dbManager {
-                viewManager.rebuildView(view, db: db)
-                loadViewFiles()
-              }
-            }
-          }
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
@@ -218,7 +180,6 @@ struct FileSearchView: View {
             let msg: String = {
               switch detailMode {
               case .workspace: return "工作区为空，右键搜索结果可添加"
-              case .views: return selectedView == nil ? "选择或创建一个视图" : "此视图无匹配文件"
               case .search: return "没有找到匹配的文件"
               }
             }()
@@ -269,18 +230,12 @@ struct FileSearchView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
-        .background(selectedViewID == view.id ? Color.accentColor.opacity(0.15) : Color.clear)
         .cornerRadius(4)
         .contentShape(Rectangle())
-        .onTapGesture {
-          selectedViewID = view.id
-          loadViewFiles()
-        }
         .contextMenu {
           Button("重建") {
             if let db = dbManager {
               viewManager.rebuildView(view, db: db)
-              if selectedViewID == view.id { loadViewFiles() }
             }
           }
           Button("在 Finder 中打开") {
@@ -289,10 +244,6 @@ struct FileSearchView: View {
           Divider()
           Button("删除", role: .destructive) {
             viewManager.remove(view)
-            if selectedViewID == view.id {
-              selectedViewID = nil
-              viewFiles = []
-            }
           }
         }
       }
@@ -308,24 +259,10 @@ struct FileSearchView: View {
     }
   }
 
-  private func loadViewFiles() {
-    guard let view = selectedView, let db = dbManager else {
-      viewFiles = []
-      return
-    }
-    DispatchQueue.global(qos: .userInitiated).async {
-      let results = db.searchWithRules(view.rules)
-      DispatchQueue.main.async { self.viewFiles = results }
-    }
-  }
-
   private func rebuildAllViews() {
     guard let db = dbManager else { return }
     DispatchQueue.global(qos: .utility).async {
       viewManager.rebuildAll(db: db)
-      DispatchQueue.main.async {
-        if detailMode == .views { loadViewFiles() }
-      }
     }
   }
 
@@ -389,6 +326,7 @@ struct FileSearchView: View {
 
 struct NewViewSheet: View {
   @ObservedObject var viewManager: ViewManager
+  var dbManager: FileDatabase?
   @Environment(\.dismiss) var dismiss
 
   @State private var name = ""
@@ -485,7 +423,7 @@ struct NewViewSheet: View {
     guard !rules.isEmpty else { return }
 
     let view = ViewConfig(name: name, rules: rules)
-    viewManager.add(view)
+    viewManager.add(view, db: dbManager)
     dismiss()
   }
 }
