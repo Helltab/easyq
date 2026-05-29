@@ -1,5 +1,6 @@
 import Foundation
 import SQLite
+import UniformTypeIdentifiers
 
 struct FileMetadata: Identifiable {
   // 必须实现 id，Table 才能识别选中行
@@ -35,6 +36,16 @@ struct FileMetadata: Identifiable {
     return formatter.string(fromByteCount: size)
   }
 }
+
+extension FileMetadata: Transferable {
+  static var transferRepresentation: some TransferRepresentation {
+    FileRepresentation(exportedContentType: .item) { file in
+      let url = URL(fileURLWithPath: file.parent + "/" + file.name)
+      return SentTransferredFile(url)
+    }
+  }
+}
+
 enum SortOption {
   case modificationTime
   case name

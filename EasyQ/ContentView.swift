@@ -203,6 +203,7 @@ struct FileSearchView: View {
             Text(item.modificationDate)
           }
         }
+        // FileMetadata 遵循 Transferable，Table 自动支持拖拽到其他 App
         .contextMenu {
           let selectedFiles = displayedFiles.filter { selectedFileIDs.contains($0.id) }
           if !selectedFiles.isEmpty {
