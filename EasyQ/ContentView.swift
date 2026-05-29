@@ -194,7 +194,7 @@ struct FileSearchView: View {
     .focusedSceneValue(\.rebuildViews, rebuildAllViews)
     .onAppear(perform: refreshData)
     .onReceive(timer) { _ in refreshData() }
-    .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("com.easyq.agent.scanComplete"))) { _ in
+    .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanComplete"))) { _ in
       // 扫描完成后自动重建所有视图
       rebuildAllViews()
     }
