@@ -53,6 +53,7 @@ struct FileSearchView: View {
   @State private var totalCount: Int = 0
   @State private var detailMode: DetailMode = .search
   @State private var sortOption: SortOption = .modificationTime
+  @State private var regexMode: Bool = false
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
   @StateObject private var searchHistory = SearchHistoryManager()
@@ -89,11 +90,23 @@ struct FileSearchView: View {
         .padding(.top, 12)
 
         // 搜索框
-        TextField("输入关键词搜索...", text: $searchText)
-          .textFieldStyle(.roundedBorder)
-          .padding(.horizontal)
-          .padding(.top, 12)
-          .focused($searchFieldFocused)
+        HStack(spacing: 6) {
+          TextField("输入关键词搜索...", text: $searchText)
+            .textFieldStyle(.roundedBorder)
+            .focused($searchFieldFocused)
+          Button(action: { regexMode.toggle() }) {
+            Text(".*")
+              .font(.system(size: 13, weight: .medium, design: .monospaced))
+              .foregroundColor(regexMode ? .white : .secondary)
+              .frame(width: 24, height: 22)
+              .background(regexMode ? Color.accentColor : Color.clear)
+              .cornerRadius(4)
+          }
+          .buttonStyle(.plain)
+          .help("正则表达式模式")
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
           .onChange(of: searchText, perform: { _ in
             searchTask?.cancel()
             searchTask = Task {
@@ -427,8 +440,9 @@ struct FileSearchView: View {
     }
     searchHistory.add(searchText)
     let sort = sortOption
+    let regex = regexMode
     DispatchQueue.global(qos: .userInitiated).async {
-      let results = self.dbManager?.searchFiles(keywords: kws, sort: sort) ?? []
+      let results = self.dbManager?.searchFiles(keywords: kws, sort: sort, regex: regex) ?? []
       DispatchQueue.main.async {
         self.files = results
         self.detailMode = .search

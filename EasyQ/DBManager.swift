@@ -87,6 +87,13 @@ class FileDatabase {
       db = try Connection(dbPath)
       try? db?.execute("PRAGMA mmap_size = 1073741824;")
       try? db?.execute("PRAGMA cache_size = -2000;")
+
+      // 注册 REGEXP 自定义函数
+      db?.createFunction("regexp", deterministic: true) { (pattern: String, value: String) -> Bool in
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let range = NSRange(value.startIndex..., in: value)
+        return regex.firstMatch(in: value, range: range) != nil
+      }
     } catch {
       print("数据库连接失败: \(error)")
       throw DatabaseError.connectionFailed(error.localizedDescription)
@@ -106,18 +113,18 @@ class FileDatabase {
       return 0
     }
   }
-  func searchFiles(keywords: [String], sort: SortOption = .modificationTime) -> [FileMetadata] {
+  func searchFiles(keywords: [String], sort: SortOption = .modificationTime, regex: Bool = false) -> [FileMetadata] {
     guard let db = db, !keywords.isEmpty else { return [] }
     var results: [FileMetadata] = []
 
     do {
       try db.execute("PRAGMA read_uncommitted = 1")
 
-      // 优先使用 FTS5 全文索引查询
-      if let ftsResults = try? searchWithFTS(db: db, keywords: keywords, sort: sort) {
+      if regex {
+        results = searchWithRegex(db: db, pattern: keywords.joined(separator: " "), sort: sort)
+      } else if let ftsResults = try? searchWithFTS(db: db, keywords: keywords, sort: sort) {
         results = ftsResults
       } else {
-        // 兜底：FTS5 表不存在时使用 LIKE 查询
         results = searchWithLIKE(db: db, keywords: keywords, sort: sort)
       }
 
@@ -189,6 +196,34 @@ class FileDatabase {
         mtime: row[mtime],
         isDir: row[isDir]
       ))
+    }
+    return results
+  }
+
+  /// 正则表达式查询
+  private func searchWithRegex(db: Connection, pattern: String, sort: SortOption) -> [FileMetadata] {
+    let orderBy: String
+    switch sort {
+    case .modificationTime: orderBy = "mtime DESC"
+    case .name: orderBy = "name ASC"
+    case .size: orderBy = "size DESC"
+    }
+
+    let sql = "SELECT parent, name, size, mtime, is_dir FROM files WHERE name REGEXP ? ORDER BY \(orderBy) LIMIT 500"
+
+    var results: [FileMetadata] = []
+    do {
+      for row in try db.prepare(sql, [pattern]) {
+        results.append(FileMetadata(
+          parent: row[0] as! String,
+          name: row[1] as! String,
+          size: row[2] as! Int64,
+          mtime: row[3] as! Int64,
+          isDir: (row[4] as! Int64) != 0
+        ))
+      }
+    } catch {
+      print("正则查询出错: \(error)")
     }
     return results
   }
