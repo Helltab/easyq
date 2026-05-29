@@ -275,6 +275,14 @@ struct FileSearchView: View {
             Text(msg).foregroundStyle(.secondary)
           }
         }
+
+        // 文件信息面板
+        if selectedFileIDs.count == 1,
+           let first = selectedFileIDs.first,
+           let file = displayedFiles.first(where: { $0.id == first }) {
+          Divider()
+          FileInfoPanel(file: file)
+        }
       }
     }
     .focusedSceneValue(\.indexCount, totalCount)
