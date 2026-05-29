@@ -2,7 +2,6 @@ import SwiftUI
 import Combine
 extension String {
   func cleanedPath() -> String {
-    // 去空格 + 正则去掉末尾所有斜杠
     return self.trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
   }
@@ -15,109 +14,105 @@ private enum DetailMode: String, CaseIterable {
 
 struct FileSearchView: View {
   @State private var searchText = ""
-  @State private var files: [FileMetadata] = [] // 这里存放搜索结果
+  @State private var files: [FileMetadata] = []
   @State private var selectedFileIDs = Set<FileMetadata.ID>()
-  @State private var showingConfirmAlert = false
+  @State private var showingFolderAlert = false
+  @State private var showingRebuildAlert = false
   @State private var pendingPath: String = ""
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
   @State private var detailMode: DetailMode = .search
   @StateObject private var workspace = WorkspaceManager()
 
-  // 定时器：每 5 秒刷新一次界面
   let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
   private var dbManager: FileDatabase? = try? FileDatabase(name: "easyqfiles.db")
 
-  /// 当前显示的文件列表
   private var displayedFiles: [FileMetadata] {
     detailMode == .workspace ? workspace.items : files
   }
 
   var body: some View {
     NavigationSplitView {
-      // --- 左侧搜索栏 ---
-      VStack(alignment: .leading) {
-        Text("搜索文件")
-          .font(.headline)
-          .padding([.top, .leading])
+      // --- 左侧栏 ---
+      VStack(alignment: .leading, spacing: 0) {
+        // 搜索区域
+        Text("EasyQ")
+          .font(.title2.bold())
+          .padding(.top, 16)
+          .padding(.horizontal)
+
+        TextField("输入关键词搜索...", text: $searchText)
+          .textFieldStyle(.roundedBorder)
+          .padding(.horizontal)
+          .padding(.top, 12)
           .onChange(of: searchText) {
-            newValue in
-            // 1. 取消之前的搜索任务
             searchTask?.cancel()
-
-            // 2. 开启新任务
             searchTask = Task {
-              // 3. 等待 150 毫秒
               try? await Task.sleep(nanoseconds: 150_000_000)
-
-              // 4. 如果任务没被取消，则执行搜索
               if !Task.isCancelled {
                 performSearch()
               }
             }
           }
 
-
-        TextField("输入关键词...", text: $searchText)
-          .textFieldStyle(.roundedBorder)
-          .padding()
-
-
-
-        Button(action: {
-          selectFolder()
-        }) {
-          HStack {
-            Image(systemName: "arrow.clockwise")
-            Text("强制刷新索引")
-          }
+        // 操作按钮
+        Button(action: { selectFolder() }) {
+          Label("强制刷新索引", systemImage: "arrow.clockwise")
         }
-        .padding([.top, .leading])
         .buttonStyle(.borderedProminent)
         .tint(.blue)
+        .padding(.horizontal)
+        .padding(.top, 12)
 
-        Button(action: {
-          rebuildIndex()
-        }) {
-          HStack {
-            Image(systemName: "trash")
-            Text("重建索引")
-          }
-        }
-        .padding(.leading)
-        .buttonStyle(.bordered)
-        .tint(.red)
+        Divider()
+          .padding(.vertical, 12)
 
-        VStack(spacing: 10) {
-          Text("索引统计")
+        // 索引统计
+        HStack {
+          Text("已索引文件")
             .font(.caption)
             .foregroundColor(.secondary)
-            .padding([.top, .leading])
-
+          Spacer()
           Text("\(totalCount)")
-            .font(.system(size: 24, weight: .bold, design: .monospaced))
+            .font(.system(size: 18, weight: .semibold, design: .monospaced))
             .foregroundColor(.blue)
             .contentTransition(.numericText())
-            .padding([.top, .leading])
         }
+        .padding(.horizontal)
         .onAppear(perform: refreshData)
         .onReceive(timer) { _ in refreshData() }
+
         Spacer()
-      }
-      .navigationSplitViewColumnWidth(min: 200, ideal: 250)
-      .alert("确认同步该目录？", isPresented: $showingConfirmAlert) {
-        Button("开始扫描", role: .none) {
-          confirmAndSendToAgent()
+
+        // 底部危险操作
+        Divider()
+        Button(action: { showingRebuildAlert = true }) {
+          Label("重建索引...", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+            .font(.caption)
+            .foregroundColor(.secondary)
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+      }
+      .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+      .alert("确认同步该目录？", isPresented: $showingFolderAlert) {
+        Button("开始扫描") { confirmAndSendToAgent() }
         Button("取消", role: .cancel) { }
       } message: {
         Text("即将深度扫描并更新数据库：\n\(pendingPath)")
       }
+      .alert("确认重建索引？", isPresented: $showingRebuildAlert) {
+        Button("重建", role: .destructive) { rebuildIndex() }
+        Button("取消", role: .cancel) { }
+      } message: {
+        Text("将清空全部索引数据并从头扫描，耗时较长。\n此操作不可撤销。")
+      }
 
     } detail: {
       VStack(spacing: 0) {
-        // --- 顶部切换栏 ---
+        // 顶部切换栏
         Picker("", selection: $detailMode) {
           ForEach(DetailMode.allCases, id: \.self) { mode in
             Text(mode.rawValue).tag(mode)
@@ -127,7 +122,7 @@ struct FileSearchView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
 
-        // --- 右侧表格 ---
+        // 表格
         Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
           TableColumn("大小", value: \.sizeString)
@@ -155,20 +150,15 @@ struct FileSearchView: View {
             Divider()
             if detailMode == .search {
               Button("添加到工作区 (\(selectedFiles.count) 项)") {
-                for file in selectedFiles {
-                  workspace.add(file)
-                }
+                for file in selectedFiles { workspace.add(file) }
               }
             } else {
               Button("从工作区移除 (\(selectedFiles.count) 项)") {
-                for file in selectedFiles {
-                  workspace.remove(file)
-                }
+                for file in selectedFiles { workspace.remove(file) }
               }
             }
           }
         }
-        // 双击打开 Finder
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
           if let first = selectedFileIDs.first,
@@ -176,7 +166,6 @@ struct FileSearchView: View {
             revealInFinder(url: file.parent + "/" + file.name)
           }
         }
-        // Cmd+单击打开 Finder
         .onTapGesture {
           if NSEvent.modifierFlags.contains(.command) {
             for id in selectedFileIDs {
@@ -208,37 +197,31 @@ struct FileSearchView: View {
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
     panel.message = "请选择要强制刷新的文件夹"
-
     panel.begin { response in
       if response == .OK, let url = panel.url {
-        // 清洗路径
         let path = url.path(percentEncoded: false).cleanedPath()
         self.pendingPath = path
-        // 第二步：触发 Alert
-        self.showingConfirmAlert = true
+        self.showingFolderAlert = true
       }
     }
   }
+
   private func confirmAndSendToAgent() {
-    let dc = DistributedNotificationCenter.default()
-    dc.postNotificationName(
+    DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("com.easyq.agent.forceScan"),
       object: nil,
       userInfo: ["targetPath": pendingPath],
       deliverImmediately: true
     )
-    print("✅ 已确认并发送指令: \(pendingPath)")
   }
 
   private func rebuildIndex() {
-    let dc = DistributedNotificationCenter.default()
-    dc.postNotificationName(
+    DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("com.easyq.agent.forceScan"),
       object: nil,
       userInfo: ["rebuild": true],
       deliverImmediately: true
     )
-    print("✅ 已发送全量重建指令")
   }
 
   private var searchKeywords: [String] {
@@ -260,12 +243,7 @@ struct FileSearchView: View {
     }
   }
 
-  // 跳转到 Finder 的核心方法
-  func revealInFinder( url: String) {
-
-    let url = URL(fileURLWithPath: url)
-
-    // 使用 NSWorkspace 在 Finder 中选中并打开
-    NSWorkspace.shared.activateFileViewerSelecting([url])
+  func revealInFinder(url: String) {
+    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: url)])
   }
 }
