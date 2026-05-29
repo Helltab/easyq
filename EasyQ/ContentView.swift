@@ -57,6 +57,7 @@ struct FileSearchView: View {
   @StateObject private var viewManager = ViewManager()
   @StateObject private var searchHistory = SearchHistoryManager()
   @FocusState private var searchFieldFocused: Bool
+  @State private var keyMonitor: Any?
 
   let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
@@ -279,7 +280,27 @@ struct FileSearchView: View {
     .focusedSceneValue(\.selectFolder, selectFolder)
     .focusedSceneValue(\.rebuildIndex, { showingRebuildAlert = true })
     .focusedSceneValue(\.rebuildViews, rebuildAllViews)
-    .onAppear(perform: refreshData)
+    .onAppear {
+      refreshData()
+      keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        // 空格预览：搜索框未聚焦且有选中文件时
+        if event.keyCode == 49 && !searchFieldFocused {
+          if let first = selectedFileIDs.first,
+             let file = displayedFiles.first(where: { $0.id == first }) {
+            let url = URL(fileURLWithPath: file.parent + "/" + file.name)
+            QuickLookHelper.shared.toggle(url)
+            return nil
+          }
+        }
+        return event
+      }
+    }
+    .onDisappear {
+      if let monitor = keyMonitor {
+        NSEvent.removeMonitor(monitor)
+        keyMonitor = nil
+      }
+    }
     .onReceive(timer) { _ in refreshData() }
     .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanComplete"))) { _ in
       // 扫描完成后自动重建所有视图
