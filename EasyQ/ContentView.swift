@@ -134,7 +134,10 @@ struct FileSearchView: View {
   }
   
   func refreshData() {
-    self.totalCount = dbManager?.count() ?? 0
+    DispatchQueue.global(qos: .utility).async {
+      let count = self.dbManager?.count() ?? 0
+      DispatchQueue.main.async { self.totalCount = count }
+    }
   }
   
   private func selectFolder() {
@@ -172,17 +175,16 @@ struct FileSearchView: View {
     let kws = searchKeywords
     if kws.isEmpty {
       files = []
-    } else {
-      files = dbManager?.searchFiles(keywords: kws) ?? []
+      return
+    }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let results = self.dbManager?.searchFiles(keywords: kws) ?? []
+      DispatchQueue.main.async { self.files = results }
     }
   }
-  // 过滤逻辑
+  // 数据库已做 AND 匹配，直接使用结果
   var filteredFiles: [FileMetadata] {
-    let kws = searchKeywords
-    if kws.isEmpty { return files }
-    return files.filter { file in
-      kws.allSatisfy { file.name.localizedCaseInsensitiveContains($0) }
-    }
+    return files
   }
   
   // 跳转到 Finder 的核心方法
