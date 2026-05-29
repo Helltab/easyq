@@ -13,6 +13,7 @@ struct EasyQApp: App {
     }
     .commands {
       IndexMenuCommands()
+      ViewMenuCommands()
     }
   }
 
@@ -67,6 +68,22 @@ struct IndexMenuCommands: Commands {
       }
       .keyboardShortcut("r", modifiers: [.command, .option, .shift])
       .disabled(rebuildIndex == nil)
+    }
+  }
+}
+
+// MARK: - 视图菜单
+
+struct ViewMenuCommands: Commands {
+  @FocusedValue(\.rebuildViews) var rebuildViews
+
+  var body: some Commands {
+    CommandMenu("视图") {
+      Button("重建所有视图") {
+        rebuildViews?()
+      }
+      .keyboardShortcut("b", modifiers: [.command, .shift])
+      .disabled(rebuildViews == nil)
     }
   }
 }
