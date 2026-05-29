@@ -52,6 +52,7 @@ struct FileSearchView: View {
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
   @State private var detailMode: DetailMode = .search
+  @State private var sortOption: SortOption = .modificationTime
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
   @StateObject private var searchHistory = SearchHistoryManager()
@@ -100,6 +101,9 @@ struct FileSearchView: View {
                 performSearch()
               }
             }
+          })
+          .onChange(of: sortOption, perform: { _ in
+            performSearch()
           })
 
         // 搜索历史（聚焦且无输入时显示）
@@ -168,6 +172,26 @@ struct FileSearchView: View {
 
     } detail: {
       VStack(spacing: 0) {
+        // 排序控制
+        if detailMode == .search && !files.isEmpty {
+          HStack {
+            Picker("排序", selection: $sortOption) {
+              Text("修改时间").tag(SortOption.modificationTime)
+              Text("文件名").tag(SortOption.name)
+              Text("大小").tag(SortOption.size)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 250)
+            Spacer()
+            Text("\(files.count) 个结果")
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
+          .padding(.horizontal)
+          .padding(.vertical, 6)
+        }
+
         Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
           TableColumn("大小", value: \.sizeString)
@@ -372,8 +396,9 @@ struct FileSearchView: View {
       return
     }
     searchHistory.add(searchText)
+    let sort = sortOption
     DispatchQueue.global(qos: .userInitiated).async {
-      let results = self.dbManager?.searchFiles(keywords: kws) ?? []
+      let results = self.dbManager?.searchFiles(keywords: kws, sort: sort) ?? []
       DispatchQueue.main.async {
         self.files = results
         self.detailMode = .search

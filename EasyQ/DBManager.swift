@@ -35,6 +35,12 @@ struct FileMetadata: Identifiable {
     return formatter.string(fromByteCount: size)
   }
 }
+enum SortOption {
+  case modificationTime
+  case name
+  case size
+}
+
 enum DatabaseError: Error {
   case connectionFailed(String)
 }
@@ -89,7 +95,7 @@ class FileDatabase {
       return 0
     }
   }
-  func searchFiles(keywords: [String]) -> [FileMetadata] {
+  func searchFiles(keywords: [String], sort: SortOption = .modificationTime) -> [FileMetadata] {
     guard let db = db, !keywords.isEmpty else { return [] }
     var results: [FileMetadata] = []
 
@@ -97,11 +103,11 @@ class FileDatabase {
       try db.execute("PRAGMA read_uncommitted = 1")
 
       // 优先使用 FTS5 全文索引查询
-      if let ftsResults = try? searchWithFTS(db: db, keywords: keywords) {
+      if let ftsResults = try? searchWithFTS(db: db, keywords: keywords, sort: sort) {
         results = ftsResults
       } else {
         // 兜底：FTS5 表不存在时使用 LIKE 查询
-        results = searchWithLIKE(db: db, keywords: keywords)
+        results = searchWithLIKE(db: db, keywords: keywords, sort: sort)
       }
 
       try db.execute("PRAGMA read_uncommitted = 0")
@@ -112,16 +118,22 @@ class FileDatabase {
   }
 
   /// FTS5 全文索引查询
-  private func searchWithFTS(db: Connection, keywords: [String]) throws -> [FileMetadata] {
+  private func searchWithFTS(db: Connection, keywords: [String], sort: SortOption) throws -> [FileMetadata] {
     // 每个关键词用双引号包裹作为短语匹配，空格分隔表示 AND
     let matchQuery = keywords.map { "\"\($0)\"" }.joined(separator: " ")
+    let orderBy: String
+    switch sort {
+    case .modificationTime: orderBy = "f.mtime DESC"
+    case .name: orderBy = "f.name ASC"
+    case .size: orderBy = "f.size DESC"
+    }
 
     let sql = """
       SELECT f.parent, f.name, f.size, f.mtime, f.is_dir
       FROM files_fts fts
       JOIN files f ON f.id = fts.rowid
       WHERE files_fts MATCH ?
-      ORDER BY f.mtime DESC
+      ORDER BY \(orderBy)
       LIMIT 500
       """
 
@@ -139,14 +151,21 @@ class FileDatabase {
   }
 
   /// LIKE 兜底查询
-  private func searchWithLIKE(db: Connection, keywords: [String]) -> [FileMetadata] {
+  private func searchWithLIKE(db: Connection, keywords: [String], sort: SortOption) -> [FileMetadata] {
     var condition: SQLite.Expression<Bool> = name.like("%\(keywords[0])%")
     for kw in keywords.dropFirst() {
       condition = condition && name.like("%\(kw)%")
     }
 
+    let order: [Expressible]
+    switch sort {
+    case .modificationTime: order = [Expression<String>("mtime").desc, Expression<String>("name").asc]
+    case .name: order = [Expression<String>("name").asc]
+    case .size: order = [Expression<String>("size").desc]
+    }
+
     let query = files.filter(condition)
-      .order([Expression<String>("mtime").desc, Expression<String>("name").asc])
+      .order(order)
       .limit(500)
 
     var results: [FileMetadata] = []
