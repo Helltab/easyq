@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+
 extension String {
   func cleanedPath() -> String {
     return self.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -10,21 +11,15 @@ extension String {
 private enum DetailMode: String, CaseIterable {
   case search = "搜索结果"
   case workspace = "工作区"
+  case views = "视图"
 }
 
-// MARK: - FocusedValue keys for menu bar commands
+// MARK: - FocusedValue keys
 
-struct FocusedIndexCountKey: FocusedValueKey {
-  typealias Value = Int
-}
-
-struct FocusedSelectFolderKey: FocusedValueKey {
-  typealias Value = () -> Void
-}
-
-struct FocusedRebuildKey: FocusedValueKey {
-  typealias Value = () -> Void
-}
+struct FocusedIndexCountKey: FocusedValueKey { typealias Value = Int }
+struct FocusedSelectFolderKey: FocusedValueKey { typealias Value = () -> Void }
+struct FocusedRebuildKey: FocusedValueKey { typealias Value = () -> Void }
+struct FocusedRebuildViewsKey: FocusedValueKey { typealias Value = () -> Void }
 
 extension FocusedValues {
   var indexCount: Int? {
@@ -39,6 +34,10 @@ extension FocusedValues {
     get { self[FocusedRebuildKey.self] }
     set { self[FocusedRebuildKey.self] = newValue }
   }
+  var rebuildViews: (() -> Void)? {
+    get { self[FocusedRebuildViewsKey.self] }
+    set { self[FocusedRebuildViewsKey.self] = newValue }
+  }
 }
 
 // MARK: - Main View
@@ -49,18 +48,30 @@ struct FileSearchView: View {
   @State private var selectedFileIDs = Set<FileMetadata.ID>()
   @State private var showingFolderAlert = false
   @State private var showingRebuildAlert = false
+  @State private var showingNewView = false
   @State private var pendingPath: String = ""
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
   @State private var detailMode: DetailMode = .search
+  @State private var selectedViewID: UUID?
+  @State private var viewFiles: [FileMetadata] = []
   @StateObject private var workspace = WorkspaceManager()
+  @StateObject private var viewManager = ViewManager()
 
   let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
   private var dbManager: FileDatabase? = try? FileDatabase(name: "easyqfiles.db")
 
+  private var selectedView: ViewConfig? {
+    viewManager.views.first { $0.id == selectedViewID }
+  }
+
   private var displayedFiles: [FileMetadata] {
-    detailMode == .workspace ? workspace.items : files
+    switch detailMode {
+    case .search: return files
+    case .workspace: return workspace.items
+    case .views: return viewFiles
+    }
   }
 
   var body: some View {
@@ -71,24 +82,42 @@ struct FileSearchView: View {
           .padding(.top, 16)
           .padding(.horizontal)
 
-        // 搜索区域
-        TextField("输入关键词搜索...", text: $searchText)
-          .textFieldStyle(.roundedBorder)
-          .padding(.horizontal)
-          .padding(.top, 12)
-          .onChange(of: searchText, perform: { _ in
-            searchTask?.cancel()
-            searchTask = Task {
-              try? await Task.sleep(nanoseconds: 150_000_000)
-              if !Task.isCancelled {
-                performSearch()
+        // 模式切换
+        Picker("", selection: $detailMode) {
+          ForEach(DetailMode.allCases, id: \.self) { mode in
+            Text(mode.rawValue).tag(mode)
+          }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.top, 12)
+
+        if detailMode == .views {
+          // 视图列表
+          viewList
+        } else {
+          // 搜索框
+          TextField("输入关键词搜索...", text: $searchText)
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .onChange(of: searchText, perform: { _ in
+              searchTask?.cancel()
+              searchTask = Task {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                if !Task.isCancelled {
+                  performSearch()
+                }
               }
-            }
-          })
+            })
+        }
 
         Spacer()
       }
       .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+      .sheet(isPresented: $showingNewView) {
+        NewViewSheet(viewManager: viewManager)
+      }
       .alert("确认同步该目录？", isPresented: $showingFolderAlert) {
         Button("开始扫描") { confirmAndSendToAgent() }
         Button("取消", role: .cancel) { }
@@ -104,14 +133,19 @@ struct FileSearchView: View {
 
     } detail: {
       VStack(spacing: 0) {
-        Picker("", selection: $detailMode) {
-          ForEach(DetailMode.allCases, id: \.self) { mode in
-            Text(mode.rawValue).tag(mode)
+        // 视图模式下显示选中视图信息
+        if detailMode == .views, let view = selectedView {
+          HStack {
+            Text(view.name)
+              .font(.headline)
+            Spacer()
+            Text("\(viewFiles.count) 个文件")
+              .font(.caption)
+              .foregroundColor(.secondary)
           }
+          .padding(.horizontal)
+          .padding(.vertical, 8)
         }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
 
         Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
@@ -142,9 +176,23 @@ struct FileSearchView: View {
               Button("添加到工作区 (\(selectedFiles.count) 项)") {
                 for file in selectedFiles { workspace.add(file) }
               }
-            } else {
+            } else if detailMode == .workspace {
               Button("从工作区移除 (\(selectedFiles.count) 项)") {
                 for file in selectedFiles { workspace.remove(file) }
+              }
+            }
+          }
+          if detailMode == .views, selectedView != nil {
+            Divider()
+            Button("在 Finder 中打开视图文件夹") {
+              if let view = selectedView {
+                revealInFinder(url: viewManager.viewDirectory(for: view).path)
+              }
+            }
+            Button("重建此视图") {
+              if let view = selectedView, let db = dbManager {
+                viewManager.rebuildView(view, db: db)
+                loadViewFiles()
               }
             }
           }
@@ -167,24 +215,113 @@ struct FileSearchView: View {
         }
         .overlay {
           if displayedFiles.isEmpty {
-            Text(detailMode == .workspace ? "工作区为空，右键搜索结果可添加" : "没有找到匹配的文件")
-              .foregroundStyle(.secondary)
+            let msg: String = {
+              switch detailMode {
+              case .workspace: return "工作区为空，右键搜索结果可添加"
+              case .views: return selectedView == nil ? "选择或创建一个视图" : "此视图无匹配文件"
+              case .search: return "没有找到匹配的文件"
+              }
+            }()
+            Text(msg).foregroundStyle(.secondary)
           }
         }
       }
     }
-    // 暴露给菜单栏
     .focusedSceneValue(\.indexCount, totalCount)
     .focusedSceneValue(\.selectFolder, selectFolder)
     .focusedSceneValue(\.rebuildIndex, { showingRebuildAlert = true })
+    .focusedSceneValue(\.rebuildViews, rebuildAllViews)
     .onAppear(perform: refreshData)
     .onReceive(timer) { _ in refreshData() }
   }
+
+  // MARK: - 视图列表
+
+  private var viewList: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text("视图")
+          .font(.caption.bold())
+          .foregroundColor(.secondary)
+        Spacer()
+        Button(action: { showingNewView = true }) {
+          Image(systemName: "plus")
+            .font(.caption)
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.horizontal)
+      .padding(.top, 12)
+
+      ForEach(viewManager.views) { view in
+        HStack {
+          Image(systemName: "folder")
+            .foregroundColor(.blue)
+            .font(.caption)
+          Text(view.name)
+            .font(.system(size: 13))
+            .lineLimit(1)
+          Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+        .background(selectedViewID == view.id ? Color.accentColor.opacity(0.15) : Color.clear)
+        .cornerRadius(4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+          selectedViewID = view.id
+          loadViewFiles()
+        }
+        .contextMenu {
+          Button("重建") {
+            if let db = dbManager {
+              viewManager.rebuildView(view, db: db)
+              if selectedViewID == view.id { loadViewFiles() }
+            }
+          }
+          Button("在 Finder 中打开") {
+            revealInFinder(url: viewManager.viewDirectory(for: view).path)
+          }
+          Divider()
+          Button("删除", role: .destructive) {
+            viewManager.remove(view)
+            if selectedViewID == view.id {
+              selectedViewID = nil
+              viewFiles = []
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // MARK: - Actions
 
   func refreshData() {
     DispatchQueue.global(qos: .utility).async {
       let count = self.dbManager?.count() ?? 0
       DispatchQueue.main.async { self.totalCount = count }
+    }
+  }
+
+  private func loadViewFiles() {
+    guard let view = selectedView, let db = dbManager else {
+      viewFiles = []
+      return
+    }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let results = db.searchWithRules(view.rules)
+      DispatchQueue.main.async { self.viewFiles = results }
+    }
+  }
+
+  private func rebuildAllViews() {
+    guard let db = dbManager else { return }
+    DispatchQueue.global(qos: .utility).async {
+      viewManager.rebuildAll(db: db)
+      DispatchQueue.main.async {
+        if detailMode == .views { loadViewFiles() }
+      }
     }
   }
 
@@ -241,5 +378,110 @@ struct FileSearchView: View {
 
   func revealInFinder(url: String) {
     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: url)])
+  }
+}
+
+// MARK: - 新建视图 Sheet
+
+struct NewViewSheet: View {
+  @ObservedObject var viewManager: ViewManager
+  @Environment(\.dismiss) var dismiss
+
+  @State private var name = ""
+  @State private var extensionsText = ""
+  @State private var keywordsText = ""
+  @State private var useDateFilter = false
+  @State private var daysBack = 7
+  @State private var customSQL = ""
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("新建视图")
+        .font(.headline)
+
+      TextField("视图名称", text: $name)
+        .textFieldStyle(.roundedBorder)
+
+      Divider()
+
+      Text("过滤规则")
+        .font(.subheadline.bold())
+
+      HStack {
+        Text("扩展名:")
+          .frame(width: 70, alignment: .trailing)
+        TextField("pdf, docx, pptx", text: $extensionsText)
+          .textFieldStyle(.roundedBorder)
+      }
+
+      HStack {
+        Text("关键词:")
+          .frame(width: 70, alignment: .trailing)
+        TextField("report, 2024", text: $keywordsText)
+          .textFieldStyle(.roundedBorder)
+      }
+
+      Toggle(isOn: $useDateFilter) {
+        HStack {
+          Text("最近修改:")
+            .frame(width: 70, alignment: .trailing)
+          if useDateFilter {
+            TextField("", value: $daysBack, format: .number)
+              .textFieldStyle(.roundedBorder)
+              .frame(width: 50)
+            Text("天内")
+          }
+        }
+      }
+
+      VStack(alignment: .leading) {
+        Text("自定义 SQL (可选):")
+          .font(.caption)
+          .foregroundColor(.secondary)
+        TextField("size > 1000000", text: $customSQL)
+          .textFieldStyle(.roundedBorder)
+      }
+
+      HStack {
+        Spacer()
+        Button("取消") { dismiss() }
+          .keyboardShortcut(.cancelAction)
+        Button("创建") { createView() }
+          .keyboardShortcut(.defaultAction)
+          .disabled(name.isEmpty)
+      }
+    }
+    .padding(20)
+    .frame(width: 380)
+  }
+
+  private func createView() {
+    var rules: [ViewRule] = []
+
+    let exts = extensionsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
+    if !exts.isEmpty {
+      rules.append(.extensions(exts))
+    }
+
+    let kws = keywordsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    if !kws.isEmpty {
+      rules.append(.filenameContains(kws))
+    }
+
+    if useDateFilter && daysBack > 0 {
+      let date = Calendar.current.date(byAdding: .day, value: -daysBack, to: Date())!
+      rules.append(.modifiedAfter(date))
+    }
+
+    let sql = customSQL.trimmingCharacters(in: .whitespaces)
+    if !sql.isEmpty {
+      rules.append(.customSQL(sql))
+    }
+
+    guard !rules.isEmpty else { return }
+
+    let view = ViewConfig(name: name, rules: rules)
+    viewManager.add(view)
+    dismiss()
   }
 }
