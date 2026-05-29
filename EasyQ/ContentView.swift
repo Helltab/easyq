@@ -111,18 +111,19 @@ struct FileSearchView: View {
           }
         }
       }
-      // 双击某行跳转
-      .contentShape(Rectangle()) // 保证整行可点
+      // 双击打开 Finder
+      .contentShape(Rectangle())
+      .onTapGesture(count: 2) {
+        if let selectedFile = filteredFiles.first(where: { $0.id == selectedFileID }) {
+          revealInFinder(url: selectedFile.parent + "/" + selectedFile.name)
+        }
+      }
+      // Cmd+单击打开 Finder
       .onTapGesture {
-        // 检查 Command 键是否被按下
         if NSEvent.modifierFlags.contains(.command) {
-          // 执行 Cmd + 单击 的逻辑
           if let selectedFile = filteredFiles.first(where: { $0.id == selectedFileID }) {
             revealInFinder(url: selectedFile.parent + "/" + selectedFile.name)
           }
-        } else {
-          // 普通单击逻辑：更新选中状态（Table 默认已处理，这里可留空）
-          
         }
       }
       .overlay {
