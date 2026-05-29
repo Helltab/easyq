@@ -133,11 +133,9 @@ class FileDatabase {
   private func ftsSync(_ file: FileMetadata) throws {
     guard let db = db else { return }
     // INSERT OR REPLACE 之后，按 parent+name 查 rowid（此时一定是最新记录）
-    let rowid: Int64? = try db.scalar(
-      "SELECT id FROM files WHERE parent = ? AND name = ?",
-      [file.parent, file.name]
-    )
-    guard let rowid = rowid else { return }
+    let target = files.filter(self.parent == file.parent && self.name == file.name)
+    guard let row = try db.pluck(target.select(id)) else { return }
+    let rowid = row[self.id]
     // 先删旧索引（新文件时 DELETE 是 no-op），再插新索引
     try db.run("DELETE FROM files_fts WHERE rowid = ?", [rowid])
     try db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, file.name])
