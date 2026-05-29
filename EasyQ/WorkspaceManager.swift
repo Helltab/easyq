@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import SwiftUI
 
 class WorkspaceManager: ObservableObject {
   @Published var items: [FileMetadata] = []
