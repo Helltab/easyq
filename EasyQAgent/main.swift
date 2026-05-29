@@ -48,6 +48,7 @@ Task {
   if !checkFullDiskAccess() {
     openFDASettings()
   }
+  IgnoreSet.loadConfig()
   let ddtm = DynamicDirTaskManager()
   ddtm.initTask(NSHomeDirectory())
   DistributedNotificationCenter.default().addObserver(

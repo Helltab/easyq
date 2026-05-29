@@ -48,6 +48,7 @@ struct FileSearchView: View {
   @State private var showingFolderAlert = false
   @State private var showingRebuildAlert = false
   @State private var showingNewView = false
+  @State private var showingIgnoreRules = false
   @State private var pendingPath: String = ""
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
@@ -57,6 +58,7 @@ struct FileSearchView: View {
   @State private var regexMode: Bool = false
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
+  @StateObject private var ignoreRulesManager = IgnoreRulesManager()
   @StateObject private var searchHistory = SearchHistoryManager()
   @FocusState private var searchFieldFocused: Bool
   @State private var keyMonitor: Any?
@@ -75,10 +77,19 @@ struct FileSearchView: View {
   var body: some View {
     NavigationSplitView {
       VStack(alignment: .leading, spacing: 0) {
-        Text("EasyQ")
-          .font(.title2.bold())
-          .padding(.top, 16)
-          .padding(.horizontal)
+        HStack {
+          Text("EasyQ")
+            .font(.title2.bold())
+          Spacer()
+          Button(action: { showingIgnoreRules = true }) {
+            Image(systemName: "gear")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .help("排除规则设置")
+        }
+        .padding(.top, 16)
+        .padding(.horizontal)
 
         // 模式切换
         Picker("", selection: $detailMode) {
@@ -185,6 +196,9 @@ struct FileSearchView: View {
       .navigationSplitViewColumnWidth(min: 200, ideal: 240)
       .sheet(isPresented: $showingNewView) {
         NewViewSheet(viewManager: viewManager, dbManager: dbManager)
+      }
+      .sheet(isPresented: $showingIgnoreRules) {
+        IgnoreRulesView(manager: ignoreRulesManager)
       }
       .alert("确认同步该目录？", isPresented: $showingFolderAlert) {
         Button("开始扫描") { confirmAndSendToAgent() }

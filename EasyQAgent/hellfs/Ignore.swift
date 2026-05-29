@@ -3,33 +3,57 @@ import Foundation
 /// 分级过滤策略：
 /// - 硬跳过（hardSkip）：完全不进入，如 node_modules、.git 等
 /// - 软跳过（softSkip）：进入但限制递归深度（最多 1 层），如 dist、build 等
-enum IgnoreSet {
+///
+/// 从 ~/Library/Application Support/EasyQ/ignoreRules.json 读取配置，
+/// 若文件不存在则使用内置默认值。
 
-  // MARK: - 硬跳过：完全不递归，已知无价值的目录
+struct IgnoreRulesConfig: Codable {
+  var hardSkip: [String]
+  var softSkip: [String]
+}
 
-  static let hardSkipNames: Set<String> = [
-    // 包管理
+class IgnoreSet {
+
+  // MARK: - 默认值（配置文件不存在时使用）
+
+  private static let defaultHardSkip: Set<String> = [
     "node_modules", "bower_components", ".pnpm-store",
-    // 版本控制
     ".git", ".svn", ".hg",
-    // 语言生态
     "envs", "venv", "env", ".tox", "__pycache__", ".mypy_cache",
     ".cargo", ".rustup", ".gradle", ".m2", ".pub-cache",
-    // 系统/IDE
     ".Trash", "Library", ".DS_Store", ".localized",
     "DerivedData", ".idea", ".vscode", ".fleet",
     "Caches", "Cookies", "Containers",
   ]
 
-  // MARK: - 软跳过：进入但限制递归深度
-
-  static let softSkipNames: Set<String> = [
+  private static let defaultSoftSkip: Set<String> = [
     "dist", "build", "target", "bin", "obj",
     "out", "output", "release", "debug",
     ".next", ".nuxt", ".turbo", ".cache",
     "coverage", ".nyc_output",
     "vendor", "Pods", ".spm",
   ]
+
+  // MARK: - 运行时配置
+
+  private static var hardSkipNames: Set<String> = defaultHardSkip
+  private static var softSkipNames: Set<String> = defaultSoftSkip
+
+  /// 从配置文件加载，若失败则使用默认值
+  static func loadConfig() {
+    let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let configURL = appSupport.appendingPathComponent("EasyQ/ignoreRules.json")
+
+    guard let data = try? Data(contentsOf: configURL),
+          let config = try? JSONDecoder().decode(IgnoreRulesConfig.self, from: data) else {
+      log("使用默认排除规则")
+      return
+    }
+
+    hardSkipNames = Set(config.hardSkip)
+    softSkipNames = Set(config.softSkip)
+    log("已加载自定义排除规则: 硬跳过 \(hardSkipNames.count) 个, 软跳过 \(softSkipNames.count) 个")
+  }
 
   // 硬跳过：名称完全匹配
   static func shouldHardSkip(name: String) -> Bool {
