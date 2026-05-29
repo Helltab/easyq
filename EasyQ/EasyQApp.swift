@@ -3,8 +3,11 @@ import ServiceManagement
 
 @main
 struct EasyQApp: App {
+  private let hotkeyManager = GlobalHotkeyManager()
+
   init() {
     startAgentIfNeeded()
+    hotkeyManager.register()
   }
 
   var body: some Scene {
