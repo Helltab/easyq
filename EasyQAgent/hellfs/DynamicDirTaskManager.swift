@@ -86,6 +86,10 @@ class DynamicDirTaskManager: ScannerDelegate {
     let has = self.fileDB?.hasFiles()
     if !(has ?? false) {
       addTask(path)
+    } else if self.fileDB?.isFTSEmpty() == true {
+      // 有数据但 FTS5 索引为空，自动重建
+      log("检测到 FTS5 索引为空，自动重建")
+      self.fileDB?.rebuildFTS()
     }
   }
   // 扫描器：动态调用此方法添加任务

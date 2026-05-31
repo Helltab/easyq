@@ -227,6 +227,17 @@ class FileDatabase {
     }
   }
 
+  /// 检查 FTS5 索引是否有数据
+  func isFTSEmpty() -> Bool {
+    guard let db = db else { return true }
+    do {
+      let count = try db.scalar("SELECT count(*) FROM files_fts_idx")
+      return count == 0
+    } catch {
+      return true
+    }
+  }
+
   /// 清空并重建 FTS5 索引（用于初始化扫描完成后）
   func rebuildFTS() {
     guard let db = db else { return }
