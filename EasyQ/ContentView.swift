@@ -53,6 +53,8 @@ struct FileSearchView: View {
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
   @State private var scanStatus: String = ""
+  @State private var scannedCount: Int = 0
+  @State private var isScanning: Bool = false
   @State private var detailMode: DetailMode = .search
   @State private var sortOption: SortOption = .modificationTime
   @State private var regexMode: Bool = false
@@ -180,14 +182,23 @@ struct FileSearchView: View {
         Spacer()
 
         // 扫描状态
-        if !scanStatus.isEmpty {
-          HStack(spacing: 4) {
+        if isScanning {
+          VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+              ProgressView()
+                .controlSize(.mini)
+              Text(scanStatus)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            }
+            // 进度条（indeterminate，因为无法预知总量）
             ProgressView()
-              .controlSize(.mini)
-            Text(scanStatus)
-              .font(.caption)
+              .progressViewStyle(.linear)
+              .frame(height: 4)
+            Text("已扫描 \(scannedCount) 个文件")
+              .font(.caption2)
               .foregroundColor(.secondary)
-              .lineLimit(1)
           }
           .padding(.horizontal)
           .padding(.bottom, 8)
@@ -355,12 +366,17 @@ struct FileSearchView: View {
     .onReceive(timer) { _ in refreshData() }
     .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanComplete"))) { _ in
       scanStatus = ""
+      isScanning = false
+      scannedCount = 0
       rebuildAllViews()
     }
     .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanProgress"))) { notification in
       if let info = notification.userInfo,
          let path = info["currentPath"] as? String,
-         let pending = info["pendingTasks"] as? Int {
+         let pending = info["pendingTasks"] as? Int,
+         let count = info["scannedCount"] as? Int {
+        isScanning = true
+        scannedCount = count
         let shortPath = path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         scanStatus = "扫描中: \(shortPath) (\(pending) 队列)"
       }
@@ -448,6 +464,9 @@ struct FileSearchView: View {
   }
 
   private func confirmAndSendToAgent() {
+    isScanning = true
+    scannedCount = 0
+    scanStatus = "正在扫描 \(pendingPath)..."
     DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("com.easyq.agent.forceScan"),
       object: nil,
@@ -457,6 +476,9 @@ struct FileSearchView: View {
   }
 
   private func doRebuildIndex() {
+    isScanning = true
+    scannedCount = 0
+    scanStatus = "正在重建索引..."
     DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("com.easyq.agent.forceScan"),
       object: nil,

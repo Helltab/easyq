@@ -10,6 +10,9 @@ class DynamicDirTaskManager: ScannerDelegate {
   private var monitor: FileSyncManager?
   private var homePath: String = ""
   private var pendingTasks: Int = 0
+  private var scannedCount: Int = 0
+  private var taskEpoch: Int = 0
+  private var needsFTSRebuild: Bool = false
   
   // 实现协议方法
   func scannerDidFindFolder(_ path: String) {
@@ -26,8 +29,8 @@ class DynamicDirTaskManager: ScannerDelegate {
   }
   
   
-  private var continuation: AsyncStream<String>.Continuation?
-  private lazy var taskStream: AsyncStream<String> = {
+  private var continuation: AsyncStream<(String, Int)>.Continuation?
+  private lazy var taskStream: AsyncStream<(String, Int)> = {
     AsyncStream { continuation in
       self.continuation = continuation
     }
@@ -39,10 +42,15 @@ class DynamicDirTaskManager: ScannerDelegate {
       
       // 启动后台消费者，监听任务流
       Task {
-        for await path in taskStream {
+        for await (path, epoch) in taskStream {
+          if epoch != self.taskEpoch {
+            // 旧批次的残留任务，跳过但正确计数
+            self.pendingTasks -= 1
+            continue
+          }
           await process(path)
         }
-        
+
       }
       Task {
         self.startWatching()
@@ -83,7 +91,7 @@ class DynamicDirTaskManager: ScannerDelegate {
   // 扫描器：动态调用此方法添加任务
   func addTask(_ path: String) {
     pendingTasks += 1
-    continuation?.yield(path)
+    continuation?.yield((path, taskEpoch))
   }
   func forceRefresh(_ path: String) {
     var file = FileMetadata()
@@ -96,6 +104,9 @@ class DynamicDirTaskManager: ScannerDelegate {
   /// 清空数据库并重新全量扫描
   func rebuildAll() {
     log("开始全量重建索引")
+    taskEpoch += 1
+    needsFTSRebuild = true
+    self.scannedCount = 0
     self.fileDB?.clearAll()
     addTask(homePath)
   }
@@ -104,23 +115,27 @@ class DynamicDirTaskManager: ScannerDelegate {
   private func process(_ path: String) async {
     log("正在处理动态文件夹: \(path)")
 
-    // 通知 GUI 当前扫描进度
+    let files = scanner.scanDirectory(path)
+    fileDB?.saveFiles(files)
+    scannedCount += files.count
+    pendingTasks -= 1
+
+    // 通知 GUI 当前扫描进度（扫描完成后发送，确保 scannedCount 已更新）
     DispatchQueue.main.async {
       DistributedNotificationCenter.default().postNotificationName(
         NSNotification.Name("com.easyq.agent.scanProgress"),
         object: nil,
-        userInfo: ["currentPath": path, "pendingTasks": self.pendingTasks],
+        userInfo: ["currentPath": path, "pendingTasks": self.pendingTasks, "scannedCount": self.scannedCount],
         deliverImmediately: true
       )
     }
 
-    let files = scanner.scanDirectory(path)
-    fileDB?.saveFiles(files)
-    pendingTasks -= 1
-
-    // 初始扫描完成后：重建 FTS5 索引 + 通知 GUI
-    if path == homePath {
-      fileDB?.rebuildFTS()
+    // 所有任务完成后：通知 GUI（仅全量重建时重建 FTS5）
+    if pendingTasks == 0 {
+      if needsFTSRebuild {
+        fileDB?.rebuildFTS()
+        needsFTSRebuild = false
+      }
       DispatchQueue.main.async {
         DistributedNotificationCenter.default().postNotificationName(
           NSNotification.Name("com.easyq.agent.scanComplete"),

@@ -8,7 +8,8 @@ struct IgnoreRulesView: View {
   @State private var newSoftSkip = ""
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(spacing: 0) {
+      // 顶部标题栏
       HStack {
         Text("排除规则设置")
           .font(.headline)
@@ -16,21 +17,39 @@ struct IgnoreRulesView: View {
         Button("恢复默认") { manager.resetToDefaults() }
           .font(.caption)
       }
-
-      Text("硬跳过 — 完全不扫描的目录（高性能）")
-        .font(.subheadline.bold())
-        .foregroundColor(.secondary)
-
-      ruleSection(items: $manager.config.hardSkip, newItem: $newHardSkip, add: manager.addHardSkip, remove: manager.removeHardSkip)
+      .padding(.horizontal, 16)
+      .padding(.top, 12)
+      .padding(.bottom, 8)
 
       Divider()
 
-      Text("软跳过 — 只扫描一层的目录")
-        .font(.subheadline.bold())
-        .foregroundColor(.secondary)
+      // 可滚动内容区
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          // 硬跳过
+          VStack(alignment: .leading, spacing: 4) {
+            Text("硬跳过 — 完全不扫描的目录（高性能）")
+              .font(.subheadline.bold())
+              .foregroundColor(.secondary)
+            ruleSection(items: $manager.config.hardSkip, newItem: $newHardSkip, add: manager.addHardSkip, remove: manager.removeHardSkip)
+          }
 
-      ruleSection(items: $manager.config.softSkip, newItem: $newSoftSkip, add: manager.addSoftSkip, remove: manager.removeSoftSkip)
+          Divider()
 
+          // 软跳过
+          VStack(alignment: .leading, spacing: 4) {
+            Text("软跳过 — 只扫描一层的目录")
+              .font(.subheadline.bold())
+              .foregroundColor(.secondary)
+            ruleSection(items: $manager.config.softSkip, newItem: $newSoftSkip, add: manager.addSoftSkip, remove: manager.removeSoftSkip)
+          }
+        }
+        .padding(16)
+      }
+
+      Divider()
+
+      // 底部按钮栏
       HStack {
         Spacer()
         Button("完成") {
@@ -39,13 +58,14 @@ struct IgnoreRulesView: View {
         }
         .keyboardShortcut(.defaultAction)
       }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 10)
     }
-    .padding(20)
     .frame(width: 420, height: 500)
   }
 
   private func ruleSection(items: Binding<[String]>, newItem: Binding<String>, add: @escaping (String) -> Void, remove: @escaping (String) -> Void) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: 2) {
       ForEach(items.wrappedValue, id: \.self) { item in
         HStack {
           Text(item)
