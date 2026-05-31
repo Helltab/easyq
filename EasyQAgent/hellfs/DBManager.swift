@@ -231,8 +231,11 @@ class FileDatabase {
   func isFTSEmpty() -> Bool {
     guard let db = db else { return true }
     do {
-      let count = try db.scalar("SELECT count(*) FROM files_fts_idx")
-      return count == 0
+      let stmt = try db.prepare("SELECT count(*) FROM files_fts_idx")
+      if let row = stmt.next(), let count = row[0] as? Int64 {
+        return count == 0
+      }
+      return true
     } catch {
       return true
     }

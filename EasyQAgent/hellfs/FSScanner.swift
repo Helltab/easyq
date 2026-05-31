@@ -118,7 +118,7 @@ class FSScanner {
 
 
     var buffer = [UInt8](repeating: 0, count: bufferSize)
-    var files: [FileMetadata] = []
+    var allFiles: [FileMetadata] = []
     let currentDepth = path.components(separatedBy: "/").count
 
     buffer.withUnsafeMutableBytes { rawBuf in
@@ -143,6 +143,7 @@ class FSScanner {
         if count == 0 { break }
 
         var entryOffset = 0
+        var batch: [FileMetadata] = []
 
         for _ in 0..<count {
 
@@ -227,14 +228,16 @@ class FSScanner {
             }
           }
 
-          files.append(file)
-
+          batch.append(file)
         }
 
-
-
+        // 每个 getattrlistbulk 批次后立即通过回调入库，避免内存堆积
+        if !batch.isEmpty {
+          delegate?.scannerDidBatchFiles(batch)
+          allFiles.append(contentsOf: batch)
+        }
       }
     }
-    return files
+    return allFiles
   }
 }

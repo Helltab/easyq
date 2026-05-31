@@ -16,12 +16,13 @@ class DynamicDirTaskManager: ScannerDelegate {
   
   // 实现协议方法
   func scannerDidFindFolder(_ path: String) {
-    
+
     self.addTask(path)
   }
-  
+
   func scannerDidBatchFiles(_ files: [FileMetadata]) {
     fileDB?.saveFiles(files)
+    scannedCount += files.count
   }
   
   func scannerDidFinishProcessing(_ path: String, success: Bool) {
@@ -119,12 +120,11 @@ class DynamicDirTaskManager: ScannerDelegate {
   private func process(_ path: String) async {
     log("正在处理动态文件夹: \(path)")
 
-    let files = scanner.scanDirectory(path)
-    fileDB?.saveFiles(files)
-    scannedCount += files.count
+    // scanDirectory 内部通过 scannerDidBatchFiles 回调增量入库
+    let _ = scanner.scanDirectory(path)
     pendingTasks -= 1
 
-    // 通知 GUI 当前扫描进度（扫描完成后发送，确保 scannedCount 已更新）
+    // 通知 GUI 当前扫描进度
     DispatchQueue.main.async {
       DistributedNotificationCenter.default().postNotificationName(
         NSNotification.Name("com.easyq.agent.scanProgress"),
