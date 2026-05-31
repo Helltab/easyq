@@ -24,6 +24,7 @@ class IgnoreSet {
     ".Trash", "Library", ".DS_Store", ".localized",
     "DerivedData", ".idea", ".vscode", ".fleet",
     "Caches", "Cookies", "Containers",
+    "easyQ",
   ]
 
   private static let defaultSoftSkip: Set<String> = [

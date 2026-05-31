@@ -118,8 +118,9 @@ class DynamicDirTaskManager: ScannerDelegate {
     fileDB?.saveFiles(files)
     pendingTasks -= 1
 
-    // 初始扫描完成后通知 GUI 重建视图
+    // 初始扫描完成后：重建 FTS5 索引 + 通知 GUI
     if path == homePath {
+      fileDB?.rebuildFTS()
       DispatchQueue.main.async {
         DistributedNotificationCenter.default().postNotificationName(
           NSNotification.Name("com.easyq.agent.scanComplete"),
