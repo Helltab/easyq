@@ -1,29 +1,57 @@
 import Cocoa
 import Foundation
-func log(_ message: String) {
-  let fileManager = FileManager.default
-  let logsDir = URL(fileURLWithPath: NSTemporaryDirectory() + "/easyq")
-  let logFile = logsDir.appendingPathComponent("EasyQAgent.log")
-  
-  let timestamp = ISO8601DateFormatter().string(from: Date())
-  let fullMessage = "[\(timestamp)] \(message)\n"
-  
-  // 确保 Logs 目录存在
-  if !fileManager.fileExists(atPath: logsDir.path) {
-    try? fileManager.createDirectory(at: logsDir, withIntermediateDirectories: true)
-  }
-  
-  // 追加写入文件
-  if let handle = try? FileHandle(forWritingTo: logFile) {
-    handle.seekToEndOfFile()
-    if let data = fullMessage.data(using: .utf8) {
-      handle.write(data)
+
+/// 日志写入器：常驻文件句柄 + 连续重复消息折叠
+/// （此前"属性获取失败"曾连续刷出 38 万行、15MB 日志，每行还 open/close 一次文件）
+enum LogWriter {
+  static let queue = DispatchQueue(label: "com.easyq.agent.log")
+  static let formatter = ISO8601DateFormatter()
+  static var handle: FileHandle?
+  static var lastMessage = ""
+  static var repeatCount = 0
+
+  static func write(_ line: String) {
+    queue.sync {
+      do {
+        if handle == nil {
+          let logsDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("easyq")
+          let logFile = logsDir.appendingPathComponent("EasyQAgent.log")
+          let fm = FileManager.default
+          if !fm.fileExists(atPath: logsDir.path) {
+            try? fm.createDirectory(at: logsDir, withIntermediateDirectories: true)
+          }
+          if !fm.fileExists(atPath: logFile.path) {
+            fm.createFile(atPath: logFile.path, contents: nil)
+          }
+          handle = try FileHandle(forWritingTo: logFile)
+          handle?.seekToEndOfFile()
+        }
+        // 连续相同消息只计数，不逐行落盘
+        if line == lastMessage {
+          repeatCount += 1
+          return
+        }
+        if repeatCount > 0 {
+          let folded = "[\(formatter.string(from: Date()))] （上一条消息重复 ×\(repeatCount)）\n"
+          let data = folded.data(using: .utf8) ?? Data()
+          handle?.write(data)
+          FileHandle.standardError.write(data)
+          repeatCount = 0
+        }
+        lastMessage = line
+        let data = (line + "\n").data(using: .utf8) ?? Data()
+        handle?.write(data)
+        FileHandle.standardError.write(data)
+      } catch {
+        handle = nil // 写失败下次重建句柄，不影响主功能
+      }
     }
-    handle.closeFile()
-  } else {
-    // 文件不存在就创建
-    try? fullMessage.write(to: logFile, atomically: true, encoding: .utf8)
   }
+}
+
+func log(_ message: String) {
+  let timestamp = ISO8601DateFormatter().string(from: Date())
+  LogWriter.write("[\(timestamp)] \(message)")
 }
 
 
@@ -45,11 +73,15 @@ func openFDASettings() {
 }
 
 Task {
+  log("EasyQAgent 启动中...")
   if !checkFullDiskAccess() {
+    log("缺少全盘访问权限，打开设置")
     openFDASettings()
   }
   IgnoreSet.loadConfig()
+  log("初始化 DynamicDirTaskManager")
   let ddtm = DynamicDirTaskManager()
+  log("调用 initTask")
   ddtm.initTask(NSHomeDirectory())
   DistributedNotificationCenter.default().addObserver(
     forName: NSNotification.Name("com.easyq.agent.forceScan"),

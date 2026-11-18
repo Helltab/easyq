@@ -73,4 +73,24 @@ class IgnoreSet {
     if name.hasPrefix(".") { return true }
     return false
   }
+
+  /// 路径级判断：任何一个祖先目录（或自身）命中忽略名单即忽略。
+  /// 供 FSEvents 回调过滤事件使用——此前只看最后一级文件名，
+  /// 删除 target/、node_modules/ 内部几十万个文件时事件全部涌入。
+  static func shouldIgnorePath(_ path: String) -> Bool {
+    // 去掉尾部的"/"，按"/"切分出每一级组件
+    var components = path.split(separator: "/").map(String.init)
+    // FSEvents 通常给目录路径（末尾无斜杠）；末级组件若是普通文件名，
+    // 单独按 shouldIgnore 检查即可；其余组件按目录名单检查
+    if let last = components.last {
+      if shouldIgnore(name: last) { return true }
+      components.removeLast()
+    }
+    for comp in components {
+      if shouldHardSkip(name: comp) { return true }
+      if shouldSoftSkip(name: comp) { return true }
+      if comp.hasPrefix(".") { return true }
+    }
+    return false
+  }
 }

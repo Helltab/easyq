@@ -42,17 +42,16 @@ class FileSyncManager {
     let callback: FSEventStreamCallback = { (stream, clientInfo, numEvents, eventPaths, eventFlags, eventIds) in
       let manager = Unmanaged<FileSyncManager>.fromOpaque(clientInfo!).takeUnretainedValue()
       let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as! [String]
+      // 过滤：检查路径的每一个组件（祖先目录命中忽略名单也跳过），
+      // 之前只看最后一级文件名，导致 target/、node_modules/ 内部的海量删除事件全部涌入
       let filteredPaths = paths.filter { path in
-        let url = URL(filePath: path)
-        let name = url.lastPathComponent
-        return !IgnoreSet.shouldIgnore(name: name)
+        !IgnoreSet.shouldIgnorePath(path)
       }
-      
+
       // 4. 如果过滤后还有路径，交给 manager 处理
       if !filteredPaths.isEmpty {
         manager.markPathsAsDirty(filteredPaths)
       }
-      //      manager.markPathsAsDirty(paths)
     }
     
     stream = FSEventStreamCreate(
@@ -95,39 +94,45 @@ class FileSyncManager {
     
     var updateList:[FileMetadata] = []
     var deleteList:[FileMetadata] = []
-    
+
     let fileManager = FileManager.default
-    
+
     log("📁 正在分析 \(pathsToProcess.count) 条变更路径...")
-    
+
     // 2. 物理状态检查与分组
+    // 删除项不需要 stat：fileExists 已经确认文件不在了，直接从路径切出 parent/name
+    // （此前对 38 万个已删除文件逐个 attributesOfItem，全部抛错刷日志）
     for path in pathsToProcess {
-      // 建议使用 URL 统一处理路径，能更好地处理空格和特殊字符
       if fileManager.fileExists(atPath: path) {
         if let metadata = FileMetadata(path: path) {
           updateList.append(metadata)
         }
-        
       } else {
-        if let metadata = FileMetadata(path: path) {
-          deleteList.append(metadata)
-        }
-        
+        let url = URL(fileURLWithPath: path)
+        deleteList.append(FileMetadata(
+          parent: url.deletingLastPathComponent().path,
+          name: url.lastPathComponent
+        ))
       }
     }
-    
-    // 3. 执行批量分发
-    // 使用 DispatchGroup 或直接同步调用，确保数据库事务的完整性
+
+    log("变更分组完成: 更新 \(updateList.count) 项, 删除 \(deleteList.count) 项")
+
+    // 3. 执行批量分发（分片，避免巨型事务把 journal 撑爆）
+    let chunkSize = 500
     if !deleteList.isEmpty {
-      log("🗑️ 准备删除: \(deleteList.count) 项")
-      delegate?.syncDelete(deleteList)
+      for start in stride(from: 0, to: deleteList.count, by: chunkSize) {
+        let chunk = Array(deleteList[start..<min(start + chunkSize, deleteList.count)])
+        delegate?.syncDelete(chunk)
+      }
     }
-    
     if !updateList.isEmpty {
-      log("📝 准备更新/插入: \(updateList.count) 项")
-      delegate?.syncUpdate(updateList)
+      for start in stride(from: 0, to: updateList.count, by: chunkSize) {
+        let chunk = Array(updateList[start..<min(start + chunkSize, updateList.count)])
+        delegate?.syncUpdate(chunk)
+      }
     }
-    
+
     log("✅ 批处理任务分发完成")
   }
   

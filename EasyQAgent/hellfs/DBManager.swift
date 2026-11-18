@@ -1,6 +1,30 @@
 import Foundation
 import SQLite
 
+/// 在每个 CJK 字符前后插入空格，让 FTS5 unicode61 分词器正确切分中文
+/// "2021绩效面谈" → "2021 绩 效 面 谈"
+func normalizeCJK(_ s: String) -> String {
+  var result = ""
+  for scalar in s.unicodeScalars {
+    let v = scalar.value
+    let isCJK = (0x4E00...0x9FFF).contains(v) ||
+                (0x3400...0x4DBF).contains(v) ||
+                (0x20000...0x2A6DF).contains(v) ||
+                (0xF900...0xFAFF).contains(v)
+    if isCJK {
+      result.append(" ")
+      result.append(Character(scalar))
+      result.append(" ")
+    } else {
+      result.append(Character(scalar))
+    }
+  }
+  // 合并连续空格
+  return result.components(separatedBy: .whitespaces)
+    .filter { !$0.isEmpty }
+    .joined(separator: " ")
+}
+
 struct FileMetadata {
   init() {
     self.parent = ""
@@ -36,6 +60,14 @@ struct FileMetadata {
     self.parent = url.deletingLastPathComponent().path
     self.name = url.lastPathComponent
   }
+  /// 删除项快速构造（不 stat 磁盘，仅供 syncDelete 使用）
+  init(parent: String, name: String) {
+    self.parent = parent
+    self.name = name
+    self.size = 0
+    self.mtime = 0
+    self.isDir = false
+  }
   var parent: String
   var name: String
   var size: Int64
@@ -62,6 +94,7 @@ func getDatabaseURL(name: String) -> URL {
 class FileDatabase {
   private var db: Connection?
   private let files = Table("files")
+  private let dbPath: String
 
   // 定义列
   private let id = Expression<Int64>("id")
@@ -72,15 +105,37 @@ class FileDatabase {
   private let isDir = Expression<Bool>("is_dir")
 
   init(name: String) throws{
+    self.dbPath = getDatabaseURL(name: name).path(percentEncoded: false)
 
     do {
-      let dbPath = getDatabaseURL(name: name).path(percentEncoded: false)
       log("数据库位于: \(dbPath)")
-      db = try Connection(dbPath)
+      let conn = try Connection(dbPath)
+      db = conn
+      // 性能 pragma：内存映射 + 2MB 页缓存
+      _ = try? conn.run("PRAGMA mmap_size = 1073741824;")
+      _ = try? conn.run("PRAGMA cache_size = -2000;")
+      // WAL 模式：大批量写入时 journal 不再长期膨胀，读写不互相阻塞
+      _ = try? conn.run("PRAGMA journal_mode = WAL;")
       try createTableAndIndices()
     } catch {
       log("数据库连接失败: \(error)")
       throw DatabaseError.connectionFailed(error.localizedDescription)
+    }
+  }
+
+  /// 删除数据库文件并重建（用于数据库损坏时恢复）
+  func resetDatabase() {
+    db = nil
+    let fm = FileManager.default
+    try? fm.removeItem(atPath: dbPath)
+    try? fm.removeItem(atPath: dbPath + "-shm")
+    try? fm.removeItem(atPath: dbPath + "-wal")
+    do {
+      db = try Connection(dbPath)
+      try createTableAndIndices()
+      log("数据库已重建: \(dbPath)")
+    } catch {
+      log("数据库重建失败: \(error)")
     }
   }
 
@@ -129,101 +184,128 @@ class FileDatabase {
     }
   }
 
-  /// 同步单条记录到 FTS5 索引（在主表 INSERT OR REPLACE 之后调用）
-  private func ftsSync(_ file: FileMetadata) throws {
+  /// 同步单条记录到 FTS5 索引（使用 normalizeCJK 处理中文分词）
+  private func ftsSync(_ file: FileMetadata) {
     guard let db = db else { return }
-    // INSERT OR REPLACE 之后，按 parent+name 查 rowid（此时一定是最新记录）
     let target = files.filter(self.parent == file.parent && self.name == file.name)
-    guard let row = try db.pluck(target.select(id)) else { return }
+    guard let row = try? db.pluck(target.select(id)) else { return }
     let rowid = row[self.id]
-    // 先删旧索引（新文件时 DELETE 是 no-op），再插新索引
-    try db.run("DELETE FROM files_fts WHERE rowid = ?", [rowid])
-    try db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, file.name])
+    let normalizedName = normalizeCJK(file.name)
+    try? db.run("DELETE FROM files_fts WHERE rowid = ?", [rowid])
+    try? db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, normalizedName])
   }
 
   func saveFiles(_ fileList: [FileMetadata]) {
+    saveFilesInternal(fileList, isRetry: false)
+  }
+
+  private func saveFilesInternal(_ fileList: [FileMetadata], isRetry: Bool) {
     guard let db = db else { return }
 
     do {
-      // 关键点：开启事务
       try db.transaction {
         for file in fileList {
           try db.run(files.insert(
-            or: .replace, // 冲突时替换，对应你的 UNIQUE(parent, name)
+            or: .replace,
             self.parent <- file.parent,
             self.name <- file.name,
             self.size <- file.size,
             self.mtime <- file.mtime,
             self.isDir <- file.isDir
           ))
-          try ftsSync(file)
+          ftsSync(file)
         }
       }
       log("成功入库 \(fileList.count) 条记录")
     } catch {
       log("批量插入失败: \(error)")
+      if !isRetry && "\(error)".contains("malformed") {
+        log("检测到数据库损坏，自动重建")
+        resetDatabase()
+        saveFilesInternal(fileList, isRetry: true)
+      }
     }
   }
   func upsert(items: [FileMetadata]) {
     guard let db = db else { return }
 
-    do {
-      // 1. 使用 run(transaction) 开启事务，极大提升批量写入速度
-      try db.transaction {
-        for item in items {
-          // 2. 构造 replace 语句
-          let statement = files.insert(or: .replace,
-                                       self.parent <- item.parent,
-                                       self.name <- item.name,
-                                       self.size <- item.size,
-                                       self.mtime <- item.mtime,
-                                       self.isDir <- item.isDir
-          )
-
-          // 3. 执行单条插入
-          try db.run(statement)
-          try ftsSync(item)
+    // 分片事务：与 delete 一致，避免巨型事务
+    let chunkSize = 500
+    var inserted = 0
+    for start in stride(from: 0, to: items.count, by: chunkSize) {
+      let chunk = Array(items[start..<min(start + chunkSize, items.count)])
+      do {
+        try db.transaction {
+          for item in chunk {
+            let statement = files.insert(or: .replace,
+                                         self.parent <- item.parent,
+                                         self.name <- item.name,
+                                         self.size <- item.size,
+                                         self.mtime <- item.mtime,
+                                         self.isDir <- item.isDir
+            )
+            try db.run(statement)
+            ftsSync(item)
+          }
         }
+        inserted += chunk.count
+      } catch {
+        log("❌ 批量写入数据库失败: \(error)")
       }
-      log("✅ 成功批量更新 \(items.count) 条记录")
-    } catch {
-      log("❌ 批量写入数据库失败: \(error)")
+    }
+    if inserted > 0 {
+      log("✅ 成功批量更新 \(inserted) 条记录")
     }
   }
   func delete(items: [FileMetadata]) {
     guard let db = db else { return }
 
-    do {
-      try db.transaction {
-        for item in items {
+    // 分片事务：每 500 条一批，journal 不会无限膨胀，中途失败也只回滚当前批
+    let chunkSize = 500
+    for start in stride(from: 0, to: items.count, by: chunkSize) {
+      let chunk = Array(items[start..<min(start + chunkSize, items.count)])
+      do {
+        try db.transaction {
+          for item in chunk {
+            let parentPath = item.parent
+            let fileName = item.name
+            let path = (parentPath + "/" + fileName)
+              .trimmingCharacters(in: .whitespacesAndNewlines)
+              .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+            // 1. 删除自身记录
+            let target = files.filter(self.parent == parentPath && self.name == fileName)
 
-          let parentPath = item.parent
-          let fileName = item.name
-          let path = (parentPath + "/" + fileName)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-                                        .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-          // 1. 删除自身记录
-          let target = files.filter(self.parent == parentPath && self.name == fileName)
+            // 收集本项需要清理 FTS 的所有 rowid（自身 + 子项）
+            var rowids: [Int64] = []
+            if let row = try? db.pluck(target.select(id)) {
+              rowids.append(row[self.id])
+            }
+            try db.run(target.delete())
 
-          // 同步删除 FTS5 索引
-          if let row = try db.pluck(target.select(id)) {
-            try db.run("DELETE FROM files_fts WHERE rowid = ?", [row[self.id]])
+            // 2. 删除所有子项（仅目录才需要）
+            // 此前不管是不是目录都做 parent LIKE 'path%' —— LIKE 前缀匹配
+            // 用不了索引 = 全表扫描，38 万项 × 全表扫描烧掉一整核几十小时
+            if item.isDir {
+              let children = files.filter(self.parent.like("\(path)%"))
+              if let childRows = try? db.prepare(children.select(id)) {
+                for childRow in childRows {
+                  rowids.append(childRow[self.id])
+                }
+              }
+              try db.run(children.delete())
+            }
+
+            // 3. 批量同步删除 FTS5 索引（一条 IN 语句替代逐行 DELETE）
+            if !rowids.isEmpty {
+              let placeholders = rowids.map { _ in "?" }.joined(separator: ",")
+              try? db.run("DELETE FROM files_fts WHERE rowid IN (\(placeholders))", rowids)
+            }
           }
-          try db.run(target.delete())
-
-          // 2. 删除所有子项（如果它是目录）
-          // 逻辑：parent 以该 path 开头，例如 parent 等于 /Users/Desktop/MyFolder 或以 /Users/Desktop/MyFolder/ 开头
-          let children = files.filter(self.parent.like("\(path)%"))
-
-          // 同步删除子项的 FTS5 索引
-          for childRow in try db.prepare(children.select(id)) {
-            try db.run("DELETE FROM files_fts WHERE rowid = ?", [childRow[self.id]])
-          }
-          try db.run(children.delete())
         }
+        log("🗑️ 删除批次完成: \(chunk.count) 项 (共 \(items.count))")
+      } catch {
+        log("❌ 批量删除失败: \(error)")
       }
-    } catch {
-      log("❌ 批量删除失败: \(error)")
     }
   }
 
@@ -241,14 +323,19 @@ class FileDatabase {
     }
   }
 
-  /// 清空并重建 FTS5 索引（用于初始化扫描完成后）
+  /// 清空并重建 FTS5 索引（CJK 字符分词后入库）
   func rebuildFTS() {
     guard let db = db else { return }
 
     do {
       try db.transaction {
         try db.run("DELETE FROM files_fts")
-        try db.run("INSERT INTO files_fts(rowid, name) SELECT id, name FROM files")
+        // 批量插入分词后的名称
+        for row in try db.prepare(files.select(id, name)) {
+          let rowid = row[self.id]
+          let normalizedName = normalizeCJK(row[self.name])
+          try db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, normalizedName])
+        }
       }
       log("✅ FTS5 索引重建完成")
     } catch {
