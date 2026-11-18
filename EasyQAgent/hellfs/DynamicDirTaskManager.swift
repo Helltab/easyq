@@ -112,7 +112,7 @@ class DynamicDirTaskManager: ScannerDelegate {
     taskEpoch += 1
     needsFTSRebuild = true
     self.scannedCount = 0
-    self.fileDB?.clearAll()
+    self.fileDB?.resetDatabase()
     addTask(homePath)
   }
   

@@ -47,6 +47,28 @@ extension FileMetadata: Transferable {
   }
 }
 
+/// 在每个 CJK 字符前后插入空格，与 Agent 侧 normalizeCJK 保持一致
+func normalizeCJK(_ s: String) -> String {
+  var result = ""
+  for scalar in s.unicodeScalars {
+    let v = scalar.value
+    let isCJK = (0x4E00...0x9FFF).contains(v) ||
+                (0x3400...0x4DBF).contains(v) ||
+                (0x20000...0x2A6DF).contains(v) ||
+                (0xF900...0xFAFF).contains(v)
+    if isCJK {
+      result.append(" ")
+      result.append(Character(scalar))
+      result.append(" ")
+    } else {
+      result.append(Character(scalar))
+    }
+  }
+  return result.components(separatedBy: .whitespaces)
+    .filter { !$0.isEmpty }
+    .joined(separator: " ")
+}
+
 enum SortOption {
   case modificationTime
   case name
@@ -123,9 +145,10 @@ class FileDatabase {
 
       if regex {
         results = searchWithRegex(db: db, pattern: keywords.joined(separator: " "), sort: sort)
-      } else if let ftsResults = try? searchWithFTS(db: db, keywords: keywords, sort: sort) {
+      } else if let ftsResults = searchWithFTS(db: db, keywords: keywords, sort: sort), !ftsResults.isEmpty {
         results = ftsResults
       } else {
+        // FTS5 无结果或查询语法非法时回退到 LIKE
         results = searchWithLIKE(db: db, keywords: keywords, sort: sort)
       }
 
@@ -136,10 +159,17 @@ class FileDatabase {
     return results
   }
 
-  /// FTS5 全文索引查询
-  private func searchWithFTS(db: Connection, keywords: [String], sort: SortOption) throws -> [FileMetadata] {
-    // 每个关键词用双引号包裹作为短语匹配，空格分隔表示 AND
-    let matchQuery = keywords.map { "\"\($0)\"" }.joined(separator: " ")
+  /// FTS5 全文索引查询（CJK 字符已分词，搜索词也需同样处理）
+  /// 返回 nil 表示 FTS5 不可用或查询语法非法（如输入了 `.`、`*` 等单独标点），
+  /// 调用方应回退到 LIKE。
+  private func searchWithFTS(db: Connection, keywords: [String], sort: SortOption) -> [FileMetadata]? {
+    // 每个关键词分词后作为 AND 条件（不用 phrase，避免相邻约束）
+    // "绩效 季度" → "绩 效" AND "季 度" → (绩 AND 效) AND (季 AND 度)
+    let parts = keywords.map { normalizeCJK($0).split(separator: " ").map(String.init) }
+    let matchQuery = parts.map { group in
+      if group.count == 1 { return group[0] }
+      return group.joined(separator: " ")
+    }.joined(separator: " ")
     let orderBy: String
     switch sort {
     case .modificationTime: orderBy = "f.mtime DESC"
@@ -156,8 +186,14 @@ class FileDatabase {
       LIMIT 500
       """
 
+    // 注意：不能用 `for row in try db.prepare(...)`。
+    // SQLite.swift 的 FailableIterator.next() 实现为 `try! failableNext()`，
+    // FTS5 在 step 阶段抛出的 syntax error 会触发 fatalError 而不是 throw，
+    // 外层 try? 捕获不到。这里手动用 failableNext() + try?，让语法错误返回 nil。
+    // 当 step 抛错时 `try?` 返回 nil，while let 自然结束循环。
+    guard let stmt = try? db.prepare(sql, [matchQuery]) else { return nil }
     var results: [FileMetadata] = []
-    for row in try db.prepare(sql, [matchQuery]) {
+    while let row = try? stmt.failableNext() {
       results.append(FileMetadata(
         parent: row[0] as! String,
         name: row[1] as! String,
@@ -227,6 +263,43 @@ class FileDatabase {
       print("正则查询出错: \(error)")
     }
     return results
+  }
+
+  /// 重建 FTS5 全文索引（CJK 分词后入库）
+  func rebuildFTS() -> Bool {
+    guard let db = db else { return false }
+    do {
+      try db.transaction {
+        try db.run("DROP TABLE IF EXISTS files_fts")
+        try db.run("CREATE VIRTUAL TABLE files_fts USING fts5(name, content=files, content_rowid=id)")
+        // 批量插入分词后的名称
+        for row in try db.prepare(files.select(id, name)) {
+          let rowid = row[self.id]
+          let normalizedName = normalizeCJK(row[self.name])
+          try db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, normalizedName])
+        }
+      }
+      print("FTS5 索引重建完成")
+      return true
+    } catch {
+      print("FTS5 索引重建失败: \(error)")
+      return false
+    }
+  }
+
+  /// 检查 FTS5 索引是否完整
+  func isFTSHealthy() -> Bool {
+    guard let db = db else { return false }
+    do {
+      try db.execute("PRAGMA read_uncommitted = 1")
+      let ftsCount = try db.scalar("SELECT count(*) FROM files_fts_idx") as? Int64 ?? 0
+      let fileCount = try db.scalar(files.count)
+      try db.execute("PRAGMA read_uncommitted = 0")
+      // FTS5 idx 的行数应该大于 0，且与文件数大致匹配
+      return ftsCount > 0 && ftsCount >= fileCount / 2
+    } catch {
+      return false
+    }
   }
 
   // MARK: - 视图规则查询

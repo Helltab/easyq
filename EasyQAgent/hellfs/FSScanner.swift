@@ -108,9 +108,12 @@ class FSScanner {
 
 
   func scanDirectory(_ path: String)-> [FileMetadata]{
+    log("scanDirectory 开始: \(path)")
     let fd = open(path, O_RDONLY | O_DIRECTORY)
     guard fd >= 0 else {
-      perror("open")
+      let err = errno
+      let errMsg = strerror(err).map { String(cString: $0) } ?? "unknown"
+      log("open 失败: \(path) errno=\(err) \(errMsg)")
       return []
     }
     defer { close(fd) }
@@ -125,6 +128,7 @@ class FSScanner {
 
       guard let base = rawBuf.baseAddress else { return }
 
+      var consecutiveFailures = 0
       while true {
 
         let count = getattrlistbulk(
@@ -136,9 +140,17 @@ class FSScanner {
         )
 
         if count < 0 {
-          perror("getattrlistbulk")
-          return
+          consecutiveFailures += 1
+          let err = errno
+          let errMsg = strerror(err).map { String(cString: $0) } ?? "unknown"
+          log("getattrlistbulk 失败 (第\(consecutiveFailures)次): \(path) errno=\(err) \(errMsg)")
+          if consecutiveFailures >= 3 {
+            log("getattrlistbulk 连续失败，放弃: \(path)")
+            return
+          }
+          continue
         }
+        consecutiveFailures = 0
 
         if count == 0 { break }
 
@@ -233,11 +245,13 @@ class FSScanner {
 
         // 每个 getattrlistbulk 批次后立即通过回调入库，避免内存堆积
         if !batch.isEmpty {
+          log("scanDirectory 批次: \(path) 本批\(batch.count)个，累计\(allFiles.count + batch.count)个")
           delegate?.scannerDidBatchFiles(batch)
           allFiles.append(contentsOf: batch)
         }
       }
     }
+    log("scanDirectory 完成: \(path) 共\(allFiles.count)个文件")
     return allFiles
   }
 }

@@ -11,6 +11,7 @@ extension String {
 private enum DetailMode: String, CaseIterable {
   case search = "搜索结果"
   case workspace = "工作区"
+  case view = "视图"
 }
 
 // MARK: - FocusedValue keys
@@ -49,6 +50,7 @@ struct FileSearchView: View {
   @State private var showingRebuildAlert = false
   @State private var showingNewView = false
   @State private var showingIgnoreRules = false
+  @State private var showingRebuildFTSAlert = false
   @State private var pendingPath: String = ""
   @State private var searchTask: Task<Void, Never>? = nil
   @State private var totalCount: Int = 0
@@ -58,11 +60,14 @@ struct FileSearchView: View {
   @State private var detailMode: DetailMode = .search
   @State private var sortOption: SortOption = .modificationTime
   @State private var regexMode: Bool = false
+  @State private var selectedView: ViewConfig? = nil
+  @State private var viewFiles: [FileMetadata] = []
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
   @StateObject private var ignoreRulesManager = IgnoreRulesManager()
   @StateObject private var searchHistory = SearchHistoryManager()
   @FocusState private var searchFieldFocused: Bool
+  @State private var showSearchHistory: Bool = false
   @State private var keyMonitor: Any?
 
   let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
@@ -73,6 +78,7 @@ struct FileSearchView: View {
     switch detailMode {
     case .search: return files
     case .workspace: return workspace.items
+    case .view: return viewFiles
     }
   }
 
@@ -83,6 +89,12 @@ struct FileSearchView: View {
           Text("EasyQ")
             .font(.title2.bold())
           Spacer()
+          Button(action: { showingRebuildFTSAlert = true }) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .help("重建全文索引")
           Button(action: { showingIgnoreRules = true }) {
             Image(systemName: "gear")
               .font(.caption)
@@ -92,16 +104,6 @@ struct FileSearchView: View {
         }
         .padding(.top, 16)
         .padding(.horizontal)
-
-        // 模式切换
-        Picker("", selection: $detailMode) {
-          ForEach(DetailMode.allCases, id: \.self) { mode in
-            Text(mode.rawValue).tag(mode)
-          }
-        }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.top, 12)
 
         // 搜索框
         HStack(spacing: 6) {
@@ -122,6 +124,10 @@ struct FileSearchView: View {
         .padding(.horizontal)
         .padding(.top, 12)
           .onChange(of: searchText, perform: { _ in
+            // 输入时关闭历史弹窗
+            if !searchText.isEmpty {
+              DispatchQueue.main.async { showSearchHistory = false }
+            }
             searchTask?.cancel()
             searchTask = Task {
               try? await Task.sleep(nanoseconds: 150_000_000)
@@ -130,25 +136,36 @@ struct FileSearchView: View {
               }
             }
           })
+          .onChange(of: searchFieldFocused, perform: { focused in
+            // 延迟到下一帧，避免在布局周期内触发弹窗状态变更
+            DispatchQueue.main.async {
+              if focused && searchText.isEmpty && !searchHistory.history.isEmpty {
+                showSearchHistory = true
+              } else if !focused {
+                showSearchHistory = false
+              }
+            }
+          })
           .onChange(of: sortOption, perform: { _ in
             performSearch()
           })
 
-        // 搜索历史（聚焦且无输入时显示）
-        if searchFieldFocused && searchText.isEmpty && !searchHistory.history.isEmpty {
+        // 搜索历史下拉列表（用 VStack 替代 popover，避免崩溃）
+        if showSearchHistory {
           VStack(alignment: .leading, spacing: 0) {
             HStack {
               Text("搜索历史")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.caption.bold())
               Spacer()
               Button("清除") { searchHistory.clear() }
                 .font(.caption)
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            Divider()
 
             ForEach(searchHistory.history, id: \.self) { item in
               HStack {
@@ -166,14 +183,20 @@ struct FileSearchView: View {
                 }
                 .buttonStyle(.plain)
               }
-              .padding(.horizontal)
-              .padding(.vertical, 3)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 5)
               .contentShape(Rectangle())
               .onTapGesture {
                 searchText = item
+                showSearchHistory = false
               }
             }
           }
+          .background(Color(NSColor.controlBackgroundColor))
+          .cornerRadius(6)
+          .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+          .padding(.horizontal)
+          .transition(.opacity)
         }
 
         // 视图列表
@@ -223,11 +246,40 @@ struct FileSearchView: View {
       } message: {
         Text("将清空全部索引数据并从头扫描，耗时较长。\n此操作不可撤销。")
       }
+      .alert("重建全文索引？", isPresented: $showingRebuildFTSAlert) {
+        Button("重建") { doRebuildFTS() }
+        Button("取消", role: .cancel) { }
+      } message: {
+        Text("从已有数据重建全文搜索索引，解决搜索找不到文件的问题。")
+      }
 
     } detail: {
       VStack(spacing: 0) {
+        // 模式切换 Tab
+        Picker("", selection: $detailMode) {
+          ForEach(DetailMode.allCases, id: \.self) { mode in
+            Text(mode.rawValue).tag(mode)
+          }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 250)
+        .padding(.horizontal)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+
         // 排序控制
-        if detailMode == .search && !files.isEmpty {
+        if detailMode == .view, let sv = selectedView {
+          HStack {
+            Text(sv.name)
+              .font(.caption.bold())
+            Spacer()
+            Text("\(viewFiles.count) 个结果")
+              .font(.caption)
+              .foregroundColor(.secondary)
+          }
+          .padding(.horizontal)
+          .padding(.vertical, 6)
+        } else if detailMode == .search && !files.isEmpty {
           HStack {
             Picker("排序", selection: $sortOption) {
               Text("修改时间").tag(SortOption.modificationTime)
@@ -272,7 +324,7 @@ struct FileSearchView: View {
               }
             }
             Divider()
-            if detailMode == .search {
+            if detailMode == .search || detailMode == .view {
               Button("添加到工作区 (\(selectedFiles.count) 项)") {
                 for file in selectedFiles { workspace.add(file) }
               }
@@ -323,6 +375,7 @@ struct FileSearchView: View {
               switch detailMode {
               case .workspace: return "工作区为空，右键搜索结果可添加"
               case .search: return "没有找到匹配的文件"
+              case .view: return "该视图暂无匹配文件"
               }
             }()
             Text(msg).foregroundStyle(.secondary)
@@ -402,6 +455,7 @@ struct FileSearchView: View {
       .padding(.top, 12)
 
       ForEach(viewManager.views) { view in
+        let isSelected = selectedView?.id == view.id && detailMode == .view
         HStack {
           Image(systemName: "folder")
             .foregroundColor(.blue)
@@ -413,8 +467,12 @@ struct FileSearchView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
+        .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
         .cornerRadius(4)
         .contentShape(Rectangle())
+        .onTapGesture {
+          selectView(view)
+        }
         .contextMenu {
           Button("重建") {
             if let db = dbManager {
@@ -446,6 +504,19 @@ struct FileSearchView: View {
     guard let db = dbManager else { return }
     DispatchQueue.global(qos: .utility).async {
       viewManager.rebuildAll(db: db)
+    }
+  }
+
+  private func selectView(_ view: ViewConfig) {
+    selectedView = view
+    detailMode = .view
+    guard let db = dbManager else { return }
+    let rules = view.rules
+    DispatchQueue.global(qos: .userInitiated).async {
+      let results = db.searchWithRules(rules)
+      DispatchQueue.main.async {
+        self.viewFiles = results
+      }
     }
   }
 
@@ -485,6 +556,23 @@ struct FileSearchView: View {
       userInfo: ["rebuild": true],
       deliverImmediately: true
     )
+  }
+
+  private func doRebuildFTS() {
+    guard let db = dbManager else { return }
+    isScanning = true
+    scanStatus = "正在重建全文索引..."
+    DispatchQueue.global(qos: .userInitiated).async {
+      let success = db.rebuildFTS()
+      DispatchQueue.main.async {
+        isScanning = false
+        scanStatus = ""
+        if success {
+          // 重建后刷新搜索结果
+          performSearch()
+        }
+      }
+    }
   }
 
   private var searchKeywords: [String] {
