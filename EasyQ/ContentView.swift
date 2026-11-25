@@ -12,6 +12,7 @@ private enum DetailMode: String, CaseIterable {
   case search = "搜索结果"
   case workspace = "工作区"
   case view = "视图"
+  case space = "空间"
 }
 
 // MARK: - FocusedValue keys
@@ -40,6 +41,66 @@ extension FocusedValues {
   }
 }
 
+// MARK: - Agent 暂存层增量缓存
+// Agent 推送的未落库变更（含墓碑），搜索时与 SQLite 结果合并，实现零延迟可查
+final class PendingChangeCache: ObservableObject {
+  struct Entry {
+    var file: FileMetadata
+    var deleted: Bool
+  }
+  @Published private(set) var entries: [String: Entry] = [:]
+
+  func apply(updates: [[String: Any]], deletes: [[String: Any]]) {
+    for dict in updates {
+      guard let parent = dict["parent"] as? String,
+            let name = dict["name"] as? String else { continue }
+      entries["\(parent)/\(name)"] = Entry(
+        file: FileMetadata(
+          parent: parent, name: name,
+          size: dict["size"] as? Int64 ?? 0,
+          mtime: dict["mtime"] as? Int64 ?? 0,
+          isDir: dict["isDir"] as? Bool ?? false
+        ),
+        deleted: false
+      )
+    }
+    for dict in deletes {
+      guard let parent = dict["parent"] as? String,
+            let name = dict["name"] as? String else { continue }
+      entries["\(parent)/\(name)"] = Entry(
+        file: FileMetadata(parent: parent, name: name, size: 0, mtime: 0, isDir: false),
+        deleted: true
+      )
+    }
+    // 容量保护：极端事件洪水时只保留更新项的一半（删除墓碑丢弃，库兜底）
+    if entries.count > 100_000 {
+      let keep = Array(entries.filter { !$0.value.deleted }.prefix(50_000))
+      entries = Dictionary(uniqueKeysWithValues: keep.map { (key: $0.key, value: $0.value) })
+    }
+  }
+
+  /// 清除已落库的条目（Agent 防抖周期落库后，本应发空推送；保险起见搜索时也可过期）
+  func removeAll() { entries.removeAll() }
+
+  /// 把暂存增量合并进 SQL 结果：墓碑剔除、新增/更新覆盖（按 id 去重，库结果优先低）
+  func merged(with base: [FileMetadata]) -> [FileMetadata] {
+    guard !entries.isEmpty else { return base }
+    var result: [FileMetadata] = []
+    var seen = Set<String>()
+    // 暂存层更新项：放在最前（最新变更优先可见）
+    for entry in entries.values where !entry.deleted {
+      if !seen.insert(entry.file.id).inserted { continue }
+      result.append(entry.file)
+    }
+    for f in base {
+      if entries[f.id]?.deleted == true { continue } // 墓碑：从结果中剔除
+      if !seen.insert(f.id).inserted { continue }    // 暂存已有更新版，跳过库版本
+      result.append(f)
+    }
+    return result
+  }
+}
+
 // MARK: - Main View
 
 struct FileSearchView: View {
@@ -62,6 +123,11 @@ struct FileSearchView: View {
   @State private var regexMode: Bool = false
   @State private var selectedView: ViewConfig? = nil
   @State private var viewFiles: [FileMetadata] = []
+  @State private var isSearching: Bool = false
+  @State private var spaceItems: [DirSize] = []
+  @State private var spacePath: String = NSHomeDirectory()
+  @State private var spaceLoading: Bool = false
+  @StateObject private var pendingCache = PendingChangeCache()
   @StateObject private var workspace = WorkspaceManager()
   @StateObject private var viewManager = ViewManager()
   @StateObject private var ignoreRulesManager = IgnoreRulesManager()
@@ -79,6 +145,7 @@ struct FileSearchView: View {
     case .search: return files
     case .workspace: return workspace.items
     case .view: return viewFiles
+    case .space: return []
     }
   }
 
@@ -110,6 +177,11 @@ struct FileSearchView: View {
           TextField("输入关键词搜索...", text: $searchText)
             .textFieldStyle(.roundedBorder)
             .focused($searchFieldFocused)
+            .onSubmit {
+              // 回车立即搜索，不等 2 秒防抖
+              searchTask?.cancel()
+              performSearch()
+            }
           Button(action: { regexMode.toggle() }) {
             Text(".*")
               .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -130,7 +202,9 @@ struct FileSearchView: View {
             }
             searchTask?.cancel()
             searchTask = Task {
-              try? await Task.sleep(nanoseconds: 150_000_000)
+              // 2 秒防抖：停止输入 2 秒后才真正发起查询，
+              // 避免逐字符触发高频查询打断输入
+              try? await Task.sleep(nanoseconds: 2_000_000_000)
               if !Task.isCancelled {
                 performSearch()
               }
@@ -201,6 +275,9 @@ struct FileSearchView: View {
 
         // 视图列表
         viewList
+
+        // 空间分析入口
+        spaceEntry
 
         Spacer()
 
@@ -279,7 +356,7 @@ struct FileSearchView: View {
           }
           .padding(.horizontal)
           .padding(.vertical, 6)
-        } else if detailMode == .search && !files.isEmpty {
+        } else if detailMode == .search && (!files.isEmpty || isSearching) {
           HStack {
             Picker("排序", selection: $sortOption) {
               Text("修改时间").tag(SortOption.modificationTime)
@@ -290,23 +367,47 @@ struct FileSearchView: View {
             .labelsHidden()
             .frame(maxWidth: 250)
             Spacer()
-            Text("\(files.count) 个结果")
-              .font(.caption)
-              .foregroundColor(.secondary)
+            if isSearching {
+              HStack(spacing: 4) {
+                ProgressView()
+                  .controlSize(.mini)
+                Text("搜索中...")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+              }
+            } else {
+              Text("\(files.count) 个结果")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
           }
           .padding(.horizontal)
           .padding(.vertical, 6)
         }
 
+        // 空间分析模式：独立视图（面包屑 + 大小排行 + 下钻）
+        if detailMode == .space {
+          SpaceDetailView(
+            path: spacePath,
+            items: spaceItems,
+            loading: spaceLoading,
+            homePath: NSHomeDirectory(),
+            onDrill: { path in loadSpace(path: path) },
+            onReveal: { path in revealInFinder(url: path) }
+          )
+        } else {
         Table(displayedFiles, selection: $selectedFileIDs) {
           TableColumn("文件名", value: \.name)
+            .width(min: 150, ideal: 220)
+          TableColumn("路径") { item in
+            PathCellText(path: item.parent)
+          }
+          .width(min: 200, ideal: 520)
           TableColumn("大小", value: \.sizeString)
           TableColumn("类型") { item in
-            Text(item.isDir ? "文件夹" : "文件")
+            TypeCellText(isDir: item.isDir)
           }
-          TableColumn("修改时间") { item in
-            Text(item.modificationDate)
-          }
+          TableColumn("修改时间", value: \.modificationDate)
         }
         // FileMetadata 遵循 Transferable，Table 自动支持拖拽到其他 App
         .contextMenu {
@@ -370,12 +471,21 @@ struct FileSearchView: View {
           }
         }
         .overlay {
-          if displayedFiles.isEmpty {
+          if isSearching && displayedFiles.isEmpty {
+            VStack(spacing: 8) {
+              ProgressView()
+                .controlSize(.regular)
+              Text("正在搜索...")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+          } else if displayedFiles.isEmpty {
             let msg: String = {
               switch detailMode {
               case .workspace: return "工作区为空，右键搜索结果可添加"
               case .search: return "没有找到匹配的文件"
               case .view: return "该视图暂无匹配文件"
+              case .space: return "该目录暂无数据"
               }
             }()
             Text(msg).foregroundStyle(.secondary)
@@ -388,6 +498,7 @@ struct FileSearchView: View {
            let file = displayedFiles.first(where: { $0.id == first }) {
           Divider()
           FileInfoPanel(file: file)
+        }
         }
       }
     }
@@ -417,6 +528,23 @@ struct FileSearchView: View {
       }
     }
     .onReceive(timer) { _ in refreshData() }
+    // Agent 暂存层增量推送：只更新缓存，供下一次搜索合并。
+    // 注意：不能在这里自动 performSearch()——performSearch 会发 queryPending，
+    // Agent 回推 pendingChanges 又回到这里，形成"查询→推送→重查"死循环（结果闪烁、选中丢失）
+    .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.pendingChanges"))) { notification in
+      if let info = notification.userInfo,
+         let updates = info["updates"] as? [[String: Any]],
+         let deletes = info["deletes"] as? [[String: Any]] {
+        pendingCache.apply(updates: updates, deletes: deletes)
+      }
+    }
+    // Agent 已把增量落库：清空本地暂存缓存（库已是权威数据），静默重查一次
+    .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.pendingFlushed"))) { _ in
+      pendingCache.removeAll()
+      if !searchText.isEmpty && detailMode == .search {
+        performSearch()
+      }
+    }
     .onReceive(DistributedNotificationCenter.default().publisher(for: NSNotification.Name("com.easyq.agent.scanComplete"))) { _ in
       scanStatus = ""
       isScanning = false
@@ -432,6 +560,65 @@ struct FileSearchView: View {
         scannedCount = count
         let shortPath = path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         scanStatus = "扫描中: \(shortPath) (\(pending) 队列)"
+      }
+    }
+  }
+
+  // MARK: - 空间分析入口
+
+  private var spaceEntry: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text("空间")
+          .font(.caption.bold())
+          .foregroundColor(.secondary)
+        Spacer()
+      }
+      .padding(.horizontal)
+      .padding(.top, 12)
+
+      HStack {
+        Image(systemName: "internaldrive")
+          .foregroundColor(.orange)
+          .font(.caption)
+        Text("磁盘占用分析")
+          .font(.system(size: 13))
+          .lineLimit(1)
+        Spacer()
+        if detailMode == .space && spaceLoading {
+          ProgressView()
+            .controlSize(.mini)
+        }
+      }
+      .padding(.horizontal)
+      .padding(.vertical, 4)
+      .background(detailMode == .space ? Color.accentColor.opacity(0.2) : Color.clear)
+      .cornerRadius(4)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        if detailMode == .space {
+          // 已在空间模式：点入口回到根目录
+          loadSpace(path: NSHomeDirectory())
+        } else {
+          detailMode = .space
+          loadSpace(path: spacePath)
+        }
+      }
+      .contextMenu {
+        Button("回到主目录") { loadSpace(path: NSHomeDirectory()) }
+      }
+    }
+  }
+
+  private func loadSpace(path: String) {
+    spacePath = path
+    spaceLoading = true
+    detailMode = .space
+    DispatchQueue.global(qos: .userInitiated).async {
+      let results = self.dbManager?.topSizes(under: path) ?? []
+      DispatchQueue.main.async {
+        self.spaceItems = results
+        self.spaceLoading = false
       }
     }
   }
@@ -579,26 +766,223 @@ struct FileSearchView: View {
     searchText.split(separator: " ").map { String($0) }.filter { !$0.isEmpty }
   }
 
+  /// 搜索结果代际：每次新搜索 +1。回包时若代际已过期（用户又输入了），结果直接丢弃。
+  /// 防止旧查询慢返回覆盖新结果导致的"闪回"。
+  @State private var searchGeneration = 0
+
   private func performSearch() {
     let kws = searchKeywords
     if kws.isEmpty {
       files = []
+      isSearching = false
       return
     }
     searchHistory.add(searchText)
     let sort = sortOption
     let regex = regexMode
-    DispatchQueue.global(qos: .userInitiated).async {
-      let results = self.dbManager?.searchFiles(keywords: kws, sort: sort, regex: regex) ?? []
+    isSearching = true
+    searchGeneration += 1
+    let generation = searchGeneration
+    let inputAtSearch = searchText
+    // 向 Agent 请求一次暂存增量（异步通知往返，Agent 响应经 pendingChanges 推送更新缓存；
+    // 本次搜索先用当前缓存合并，下次搜索自然带上最新增量——最终一致，无需等待）
+    DistributedNotificationCenter.default().postNotificationName(
+      NSNotification.Name("com.easyq.agent.queryPending"),
+      object: nil,
+      userInfo: [:],
+      deliverImmediately: true
+    )
+    // 查询走 DBManager 专用串行队列，不碰主线程；UI 保持完全流畅
+    dbManager?.searchFiles(keywords: kws, sort: sort, regex: regex) { results in
       DispatchQueue.main.async {
-        self.files = results
+        // 代际校验：只接受最新一次搜索的结果（旧的慢查询直接丢弃）
+        guard generation == self.searchGeneration else { return }
+        // 主线程合并暂存增量（@Published 状态只在主线程访问）
+        self.files = self.pendingCache.merged(with: results)
         self.detailMode = .search
+        self.isSearching = false
       }
     }
   }
 
   func revealInFinder(url: String) {
     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: url)])
+  }
+}
+
+// MARK: - 表格小组件（拆分降低 body 类型推断复杂度）
+
+private struct PathCellText: View {
+  let path: String
+  var body: some View {
+    Text(path)
+      .font(.system(size: 11))
+      .foregroundColor(.secondary)
+      .lineLimit(1)
+      .truncationMode(.middle)
+      .help(path)
+  }
+}
+
+private struct TypeCellText: View {
+  let isDir: Bool
+  var body: some View {
+    Text(isDir ? "文件夹" : "文件")
+  }
+}
+
+// MARK: - 空间分析视图
+
+/// 磁盘占用排行：面包屑 + Top 列表（点击行下钻，右键 Finder 显示）
+private struct SpaceDetailView: View {
+  let path: String
+  let items: [DirSize]
+  let loading: Bool
+  let homePath: String
+  let onDrill: (String) -> Void
+  let onReveal: (String) -> Void
+
+  /// 面包屑组件路径：~ 压缩 home
+  private var displayPath: String {
+    path.replacingOccurrences(of: homePath, with: "~")
+  }
+
+  private var crumbs: [(label: String, path: String)] {
+    // 从 home 开始的每一段都可点
+    var out: [(String, String)] = []
+    if path.hasPrefix(homePath) {
+      out.append(("~", homePath))
+      let rest = String(path.dropFirst(homePath.count + 1))
+      if !rest.isEmpty {
+        var acc = homePath
+        for seg in rest.split(separator: "/") {
+          acc += "/" + seg
+          out.append((String(seg), acc))
+        }
+      }
+    } else {
+      out.append(("/", "/"))
+      for seg in path.split(separator: "/") {
+        out.append((String(seg), "/" + seg))
+      }
+    }
+    return out
+  }
+
+  private var grandTotal: Int64 {
+    items.reduce(0) { $0 + $1.totalSize }
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      // 面包屑 + 汇总
+      HStack(spacing: 4) {
+        ForEach(Array(crumbs.enumerated()), id: \.offset) { idx, crumb in
+          if idx > 0 {
+            Image(systemName: "chevron.right")
+              .font(.system(size: 9))
+              .foregroundColor(.secondary)
+          }
+          Button(crumb.label) {
+            onDrill(crumb.path)
+          }
+          .buttonStyle(.plain)
+          .foregroundColor(idx == crumbs.count - 1 ? .primary : .accentColor)
+          .font(.system(size: 12, weight: idx == crumbs.count - 1 ? .semibold : .regular))
+          .lineLimit(1)
+        }
+        Spacer()
+        if loading {
+          ProgressView().controlSize(.mini)
+        } else {
+          Text("合计 \(ByteCountFormatter.string(fromByteCount: grandTotal, countStyle: .file)) · Top \(items.count)")
+            .font(.caption)
+            .foregroundColor(.secondary)
+        }
+      }
+      .padding(.horizontal)
+      .padding(.vertical, 8)
+
+      Divider()
+
+      if items.isEmpty && !loading {
+        Spacer()
+        Text("该目录暂无索引数据")
+          .foregroundColor(.secondary)
+        Spacer()
+      } else {
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+              SpaceRowView(
+                item: item,
+                rank: idx + 1,
+                maxTotal: items.first?.totalSize ?? 1
+              )
+              .contentShape(Rectangle())
+              .onTapGesture { onDrill(item.path) }
+              .contextMenu {
+                Button("下钻") { onDrill(item.path) }
+                Button("在 Finder 中显示") { onReveal(item.path) }
+                Divider()
+                Button("复制路径") {
+                  NSPasteboard.general.clearContents()
+                  NSPasteboard.general.writeObjects([item.path] as [NSPasteboardWriting])
+                }
+              }
+            }
+          }
+          .padding(.vertical, 4)
+        }
+      }
+    }
+    .background(Color(NSColor.controlBackgroundColor))
+  }
+}
+
+private struct SpaceRowView: View {
+  let item: DirSize
+  let rank: Int
+  let maxTotal: Int64
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Text(String(format: "%3d", rank))
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundColor(.secondary)
+        .frame(width: 34, alignment: .trailing)
+      Image(systemName: "folder.fill")
+        .font(.system(size: 11))
+        .foregroundColor(.blue)
+      Text(item.name)
+        .font(.system(size: 13))
+        .lineLimit(1)
+        .help(item.path)
+      // 占比条
+      GeometryReader { geo in
+        ZStack(alignment: .leading) {
+          Capsule().fill(Color.secondary.opacity(0.15))
+          Capsule()
+            .fill(LinearGradient(colors: [.orange, .orange.opacity(0.7)], startPoint: .leading, endPoint: .trailing))
+            .frame(width: max(2, geo.size.width * ratio))
+        }
+      }
+      .frame(height: 6)
+      Spacer()
+      Text(item.sizeString)
+        .font(.system(size: 12, design: .monospaced))
+        .foregroundColor(.secondary)
+        .frame(minWidth: 70, alignment: .trailing)
+    }
+    .padding(.horizontal)
+    .padding(.vertical, 5)
+    .background(
+      Color.primary.opacity(0.001) // 命中区
+    )
+  }
+
+  private var ratio: CGFloat {
+    maxTotal > 0 ? CGFloat(item.totalSize) / CGFloat(maxTotal) : 0
   }
 }
 
