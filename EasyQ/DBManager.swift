@@ -94,10 +94,12 @@ func getDatabaseURL(name: String) -> URL {
 class FileDatabase {
   private var db: Connection?
   private let files = Table("files")
-  
+  private let paths = Table("paths")
+
   // 定义列
   private let id = Expression<Int64>("id")
-  private let parent = Expression<String>("parent")
+  private let pathId = Expression<Int64>("path_id")
+  private let path = Expression<String>("path")
   private let name = Expression<String>("name")
   private let size = Expression<Int64>("size")
   private let mtime = Expression<Int64>("mtime")
@@ -136,7 +138,24 @@ class FileDatabase {
       return 0
     }
   }
-  func searchFiles(keywords: [String], sort: SortOption = .modificationTime, regex: Bool = false) -> [FileMetadata] {
+  /// 查询连接专用串行队列：搜索请求全部在此排队执行，
+  /// 不占用主线程/用户交互；同时串行化避免并发 SQLite 连接互相争锁
+  private let queryQueue = DispatchQueue(label: "com.easyq.gui.query", qos: .userInitiated)
+
+  func searchFiles(keywords: [String], sort: SortOption = .modificationTime, regex: Bool = false, completion: @escaping ([FileMetadata]) -> Void) {
+    guard let db = db, !keywords.isEmpty else {
+      completion([])
+      return
+    }
+    // 快照当前关键词，异步执行时与最新输入比对，过期结果直接丢弃（防旧结果覆盖新输入）
+    queryQueue.async { [weak self] in
+      guard let self = self else { return completion([]) }
+      let results = self.searchFilesSync(keywords: keywords, sort: sort, regex: regex)
+      completion(results)
+    }
+  }
+
+  private func searchFilesSync(keywords: [String], sort: SortOption, regex: Bool) -> [FileMetadata] {
     guard let db = db, !keywords.isEmpty else { return [] }
     var results: [FileMetadata] = []
 
@@ -178,9 +197,10 @@ class FileDatabase {
     }
 
     let sql = """
-      SELECT f.parent, f.name, f.size, f.mtime, f.is_dir
+      SELECT p.path, f.name, f.size, f.mtime, f.is_dir
       FROM files_fts fts
       JOIN files f ON f.id = fts.rowid
+      JOIN paths p ON p.path_id = f.parent_id
       WHERE files_fts MATCH ?
       ORDER BY \(orderBy)
       LIMIT 500
@@ -207,31 +227,37 @@ class FileDatabase {
 
   /// LIKE 兜底查询
   private func searchWithLIKE(db: Connection, keywords: [String], sort: SortOption) -> [FileMetadata] {
-    var condition: SQLite.Expression<Bool> = name.like("%\(keywords[0])%")
-    for kw in keywords.dropFirst() {
-      condition = condition && name.like("%\(kw)%")
+    // (name LIKE ? AND name LIKE ? ...) JOIN paths 取全路径
+    var whereParts: [String] = []
+    var params: [SQLite.Binding?] = []
+    for kw in keywords {
+      whereParts.append("f.name LIKE '%' || ? || '%'")
+      params.append(kw)
     }
 
-    let order: [Expressible]
+    let orderBy: String
     switch sort {
-    case .modificationTime: order = [Expression<String>("mtime").desc, Expression<String>("name").asc]
-    case .name: order = [Expression<String>("name").asc]
-    case .size: order = [Expression<String>("size").desc]
+    case .modificationTime: orderBy = "f.mtime DESC, f.name ASC"
+    case .name: orderBy = "f.name ASC"
+    case .size: orderBy = "f.size DESC"
     }
 
-    let query = files.filter(condition)
-      .order(order)
-      .limit(500)
+    let sql = """
+      SELECT p.path, f.name, f.size, f.mtime, f.is_dir
+      FROM files f JOIN paths p ON p.path_id = f.parent_id
+      WHERE \(whereParts.joined(separator: " AND "))
+      ORDER BY \(orderBy)
+      LIMIT 500
+      """
 
     var results: [FileMetadata] = []
-    guard let rows = try? db.prepare(query) else { return results }
-    for row in rows {
+    for row in safeIterate(db, sql, params) {
       results.append(FileMetadata(
-        parent: row[parent],
-        name: row[name],
-        size: row[size],
-        mtime: row[mtime],
-        isDir: row[isDir]
+        parent: row[0] as! String,
+        name: row[1] as! String,
+        size: row[2] as! Int64,
+        mtime: row[3] as! Int64,
+        isDir: (row[4] as! Int64) != 0
       ))
     }
     return results
@@ -241,28 +267,41 @@ class FileDatabase {
   private func searchWithRegex(db: Connection, pattern: String, sort: SortOption) -> [FileMetadata] {
     let orderBy: String
     switch sort {
-    case .modificationTime: orderBy = "mtime DESC"
-    case .name: orderBy = "name ASC"
-    case .size: orderBy = "size DESC"
+    case .modificationTime: orderBy = "f.mtime DESC"
+    case .name: orderBy = "f.name ASC"
+    case .size: orderBy = "f.size DESC"
     }
 
-    let sql = "SELECT parent, name, size, mtime, is_dir FROM files WHERE name REGEXP ? ORDER BY \(orderBy) LIMIT 500"
+    let sql = """
+      SELECT p.path, f.name, f.size, f.mtime, f.is_dir
+      FROM files f JOIN paths p ON p.path_id = f.parent_id
+      WHERE f.name REGEXP ? ORDER BY \(orderBy) LIMIT 500
+      """
 
     var results: [FileMetadata] = []
-    do {
-      for row in try db.prepare(sql, [pattern]) {
-        results.append(FileMetadata(
-          parent: row[0] as! String,
-          name: row[1] as! String,
-          size: row[2] as! Int64,
-          mtime: row[3] as! Int64,
-          isDir: (row[4] as! Int64) != 0
-        ))
-      }
-    } catch {
-      print("正则查询出错: \(error)")
+    for row in safeIterate(db, sql, [pattern]) {
+      results.append(FileMetadata(
+        parent: row[0] as! String,
+        name: row[1] as! String,
+        size: row[2] as! Int64,
+        mtime: row[3] as! Int64,
+        isDir: (row[4] as! Int64) != 0
+      ))
     }
     return results
+  }
+
+  /// 安全行迭代：SQLite.swift 的 for-in 迭代器内部是 try! failableNext()，
+  /// step 阶段任何错误（FTS 重建中/SCHEMA 变动/BUSY）都会 fatalError 直接崩主程序。
+  /// 这里统一改用 failableNext + try?，错误时返回已收集的行（部分结果优于崩溃）。
+  private func safeIterate(_ db: Connection, _ sql: String, _ params: [SQLite.Binding?]) -> [[SQLite.Binding?]] {
+    var rows: [[SQLite.Binding?]] = []
+    guard let base = try? db.prepare(sql) else { return rows }
+    let stmt = base.bind(params)
+    while let row = try? stmt.failableNext() {
+      rows.append(row)
+    }
+    return rows
   }
 
   /// 重建 FTS5 全文索引（CJK 分词后入库）
@@ -272,11 +311,17 @@ class FileDatabase {
       try db.transaction {
         try db.run("DROP TABLE IF EXISTS files_fts")
         try db.run("CREATE VIRTUAL TABLE files_fts USING fts5(name, content=files, content_rowid=id)")
-        // 批量插入分词后的名称
-        for row in try db.prepare(files.select(id, name)) {
-          let rowid = row[self.id]
-          let normalizedName = normalizeCJK(row[self.name])
-          try db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, normalizedName])
+        // 批量插入分词后的名称（安全迭代 + 分片，避免巨型事务与 try! 崩溃）
+        var lastId: Int64 = 0
+        while true {
+          let rows = safeIterate(db, "SELECT id, name FROM files WHERE id > ? ORDER BY id LIMIT 50000", [lastId])
+          if rows.isEmpty { break }
+          for row in rows {
+            let rowid = row[0] as! Int64
+            let rawName = row[1] as! String
+            try? db.run("INSERT INTO files_fts(rowid, name) VALUES (?, ?)", [rowid, normalizeCJK(rawName)])
+            lastId = rowid
+          }
         }
       }
       print("FTS5 索引重建完成")
@@ -302,12 +347,65 @@ class FileDatabase {
     }
   }
 
-  // MARK: - 视图规则查询
+  // MARK: - 空间分析
+
+  /// 目录占用聚合：某个父目录下每个子项(含目录)的累计大小
+  /// 展开语义：目录的"累计大小"= 其所有后代文件之和——
+  /// 通过把每条文件的完整祖先链映射到 paths 表实现（递归 CTE）
+  func topSizes(under parentPath: String, limit: Int = 200) -> [DirSize] {
+    guard let db = db else { return [] }
+    // 直接子项 + 每个子项后代文件的累计大小（含子项自身若是文件）
+    let sql = """
+      WITH sub AS (
+        SELECT path_id FROM paths
+        WHERE path = ? OR path LIKE ? || '/%'
+      )
+      SELECT p.path, p.path_id, COALESCE(s.total, 0) AS total
+      FROM (
+        SELECT path, path_id FROM paths
+        WHERE path LIKE ? || '/%' AND path NOT LIKE ? || '/%/%'
+      ) p
+      LEFT JOIN (
+        SELECT f.parent_id AS pid, SUM(f.size) AS total
+        FROM files f WHERE f.parent_id IN (SELECT path_id FROM sub)
+        GROUP BY f.parent_id
+      ) s ON s.pid = p.path_id
+      ORDER BY total DESC
+      LIMIT ?
+      """
+    var results: [DirSize] = []
+    for row in safeIterate(db, sql, [parentPath, parentPath, parentPath, parentPath, Int64(limit)]) {
+      let path = row[0] as! String
+      let total = row[2] as! Int64
+      let name = (path as NSString).lastPathComponent
+      results.append(DirSize(path: path, name: name, totalSize: total, isDir: true))
+    }
+    return results
+  }
+}
+
+/// 空间分析行模型
+struct DirSize: Identifiable {
+  var id: String { path }
+  let path: String
+  let name: String
+  let totalSize: Int64
+  let isDir: Bool
+  var sizeString: String {
+    let formatter = ByteCountFormatter()
+    formatter.allowedUnits = [.useAll]
+    formatter.countStyle = .file
+    return formatter.string(fromByteCount: totalSize)
+  }
+}
+
+// MARK: - 视图规则查询
+
+extension FileDatabase {
 
   func searchWithRules(_ rules: [ViewRule], limit: Int = 10000) -> [FileMetadata] {
     guard let db = db, !rules.isEmpty else { return [] }
     var results: [FileMetadata] = []
-
     var whereClauses: [String] = []
     var params: [SQLite.Binding?] = []
 
@@ -338,23 +436,19 @@ class FileDatabase {
     }
 
     let whereStr = whereClauses.joined(separator: " AND ")
-    let sql = "SELECT parent, name, size, mtime, is_dir FROM files WHERE \(whereStr) ORDER BY mtime DESC LIMIT \(limit)"
+    let sql = "SELECT p.path, f.name, f.size, f.mtime, f.is_dir FROM files f JOIN paths p ON p.path_id = f.parent_id WHERE \(whereStr) ORDER BY f.mtime DESC LIMIT \(limit)"
 
-    do {
-      try db.execute("PRAGMA read_uncommitted = 1")
-      for row in try db.prepare(sql, params) {
-        results.append(FileMetadata(
-          parent: row[0] as! String,
-          name: row[1] as! String,
-          size: row[2] as! Int64,
-          mtime: row[3] as! Int64,
-          isDir: (row[4] as! Int64) != 0
-        ))
-      }
-      try db.execute("PRAGMA read_uncommitted = 0")
-    } catch {
-      print("视图查询出错: \(error)")
+    try? db.execute("PRAGMA read_uncommitted = 1")
+    for row in safeIterate(db, sql, params) {
+      results.append(FileMetadata(
+        parent: row[0] as! String,
+        name: row[1] as! String,
+        size: row[2] as! Int64,
+        mtime: row[3] as! Int64,
+        isDir: (row[4] as! Int64) != 0
+      ))
     }
+    try? db.execute("PRAGMA read_uncommitted = 0")
     return results
   }
 }
