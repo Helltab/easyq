@@ -1,5 +1,8 @@
 import Foundation
 
+// 观察者 token 全局持有（避免 ARC 释放导致监听失效）
+var retainedObservers: [NSObjectProtocol] = []
+
 class DynamicDirTaskManager: ScannerDelegate {
 
 
@@ -68,12 +71,56 @@ class DynamicDirTaskManager: ScannerDelegate {
     // 监听用户文稿目录
     //let docsPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
 //    let downloadPath = (NSHomeDirectory() as NSString).appendingPathComponent("Downloads")
-  
+
     let homePath = NSHomeDirectory()
     log("开始监听\(homePath)")
     monitor = FileSyncManager()
     monitor?.delegate = self
     monitor?.startMonitoring(paths: [homePath], )
+
+    // 应答 GUI 的暂存层拉取请求：把未落库的增量发回去（GUI 搜索前拉取，与库结果合并）
+    // ⚠️ token 必须持有，否则观察者失效
+    retainedObservers.append(
+      DistributedNotificationCenter.default().addObserver(
+        forName: NSNotification.Name("com.easyq.agent.queryPending"),
+        object: nil,
+        queue: nil
+      ) { [weak self] _ in
+      guard let self = self else { return }
+      let changes = self.monitor?.pendingStore.snapshot() ?? []
+      guard !changes.isEmpty else { return }
+      var updates: [[String: Any]] = []
+      var deletes: [[String: Any]] = []
+      for change in changes {
+        let dict: [String: Any] = [
+          "parent": change.file.parent,
+          "name": change.file.name,
+          "size": change.file.size,
+          "mtime": change.file.mtime,
+          "isDir": change.file.isDir
+        ]
+        if change.deleted {
+          deletes.append(dict)
+        } else {
+          updates.append(dict)
+        }
+      }
+      var userInfo: [String: Any] = [:]
+      // 分布式通知 userInfo 走 plist 序列化，分批控制体积
+      if !updates.isEmpty {
+        userInfo["updates"] = updates
+      }
+      if !deletes.isEmpty {
+        userInfo["deletes"] = deletes
+      }
+      DistributedNotificationCenter.default().postNotificationName(
+        NSNotification.Name("com.easyq.agent.pendingChanges"),
+        object: nil,
+        userInfo: userInfo,
+        deliverImmediately: true
+      )
+    }
+    )
   }
   func syncDelete(_ files: [FileMetadata]) {
     self.fileDB?.delete(items: files)

@@ -83,19 +83,23 @@ Task {
   let ddtm = DynamicDirTaskManager()
   log("调用 initTask")
   ddtm.initTask(NSHomeDirectory())
-  DistributedNotificationCenter.default().addObserver(
-    forName: NSNotification.Name("com.easyq.agent.forceScan"),
-    object: nil,
-    queue: .main
-  ) { notification in
-    let rebuild = notification.userInfo?["rebuild"] as? Bool ?? false
-    if rebuild {
-      log("🤖 Agent 收到指令：全量重建索引")
-      ddtm.rebuildAll()
-    } else if let path = notification.userInfo?["targetPath"] as? String {
-      log("🤖 Agent 收到指令：立即扫描路径 \(path)")
-      ddtm.forceRefresh(path)
+  // ⚠️ addObserver 的返回 token 必须长期持有，否则 ARC 释放后观察者失效
+  // （此前 token 没保存，重启后 forceScan/queryPending 通知全部收不到）
+  retainedObservers.append(
+    DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name("com.easyq.agent.forceScan"),
+      object: nil,
+      queue: .main
+    ) { notification in
+      let rebuild = notification.userInfo?["rebuild"] as? Bool ?? false
+      if rebuild {
+        log("🤖 Agent 收到指令：全量重建索引")
+        ddtm.rebuildAll()
+      } else if let path = notification.userInfo?["targetPath"] as? String {
+        log("🤖 Agent 收到指令：立即扫描路径 \(path)")
+        ddtm.forceRefresh(path)
+      }
     }
-  }
+  )
 }
 RunLoop.main.run(until: Date.distantFuture)
